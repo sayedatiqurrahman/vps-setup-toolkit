@@ -10,6 +10,9 @@ All notable changes to the VPS Setup Toolkit are documented here.
 - Automatic `docker_gwbridge` Traefik ingress rules (`DOKPLOY-INGRESS` and `DOKPLOY-RETURN`) when Docker Engine, Dokploy or Coolify is selected; the watcher restores them after reboots and bridge re-creation.
 - Traefik container IP detection from Docker with a configurable `TRAEFIK_IP` fallback.
 - `VPS_SETUP_SKIP_FIREWALL=1` to opt out of the automatic firewall steps in `run ... --yes` mode.
+- `CONTRIBUTING.md` with open-source contribution opportunities, development workflow and safety guidelines.
+- Branded ASCII banner for **VPS Sentinel** (powered by Programming Light, developed by Sayed Atiqur Rahman) and a clickable table of contents in the README.
+- README restructured around the single-command installation; advanced alternatives and supported systems moved to the appendix.
 
 ### Removed
 
