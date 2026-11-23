@@ -105,7 +105,7 @@ archive_sha256(){
 }
 
 bootstrap_download(){
-  local repo archive tmp owner repo_name found actual expected checksum_url verified=0
+  local repo archive tmp owner repo_name found actual expected checksum_url ref_kind verified=0
   command_exists curl || die "curl is required to bootstrap the toolkit."
   command_exists tar || die "tar is required to bootstrap the toolkit."
 
@@ -115,7 +115,10 @@ bootstrap_download(){
   elif [[ "$repo" =~ ^https://github\.com/([^/]+)/([^/]+)/?$ ]]; then
     owner="${BASH_REMATCH[1]}"
     repo_name="${BASH_REMATCH[2]%.git}"
-    archive="https://codeload.github.com/${owner}/${repo_name}/tar.gz/refs/heads/${REF}"
+    # Version tags (v1.1.0, ...) live under refs/tags; branch names under heads.
+    ref_kind="heads"
+    [[ "$REF" =~ ^v[0-9] ]] && ref_kind="tags"
+    archive="https://codeload.github.com/${owner}/${repo_name}/tar.gz/refs/${ref_kind}/${REF}"
   else
     die "Set VPS_SETUP_ARCHIVE_URL or use a https://github.com/OWNER/REPO VPS_SETUP_REPO_URL."
   fi
@@ -124,15 +127,17 @@ bootstrap_download(){
   # This function is called from a command substitution; keep status output on
   # stderr so only the resolved source path is captured by the caller.
   log "Downloading toolkit archive from ${archive}" >&2
-  if ! curl -fsSL "$archive" -o "${tmp}/archive.tar.gz"; then
-    # A pinned ref is a tag; older callers used branch names. Try both.
-    if [[ "$archive" == *"/refs/heads/"* ]]; then
-      archive="${archive/\/refs\/heads\//\/refs\/tags\/}"
-      log "Retrying as a tag ref: ${archive}" >&2
-      curl -fsSL "$archive" -o "${tmp}/archive.tar.gz" || die "Archive download failed."
+  if ! curl -fsSL "$archive" -o "${tmp}/archive.tar.gz" 2>/dev/null; then
+    [[ -z "${VPS_SETUP_ARCHIVE_URL:-}" ]] || die "Archive download failed."
+    # Fall back to the other ref namespace (tag <-> branch) before giving up.
+    if [[ "$ref_kind" == "heads" ]]; then
+      ref_kind="tags"
     else
-      die "Archive download failed."
+      ref_kind="heads"
     fi
+    archive="https://codeload.github.com/${owner}/${repo_name}/tar.gz/refs/${ref_kind}/${REF}"
+    log "Retrying as a ${ref_kind} ref: ${archive}" >&2
+    curl -fsSL "$archive" -o "${tmp}/archive.tar.gz" || die "Archive download failed."
   fi
 
   if [[ -n "${VPS_SETUP_ARCHIVE_SHA256:-}" ]]; then
