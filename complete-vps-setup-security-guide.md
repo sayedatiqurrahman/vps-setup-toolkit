@@ -273,8 +273,8 @@ Outbound service categories (select multiple numbers, comma-separated):
 15) Elasticsearch           TCP: 9200,9300
 16) RabbitMQ                TCP: 5671,5672
 17) MQTT                    TCP: 1883,8883
-18) Nixtec external MariaDB TCP: 23306
-19) Nixtec Garage/S3        TCP: 24900
+18) External MariaDB        TCP: 23306
+19) Garage/S3 endpoint      TCP: 24900
 20) SMS/REST API            TCP: 443
 21) Custom TCP ports
 22) Custom UDP ports
@@ -440,7 +440,7 @@ load_config
 main_menu
 ```
 
-## Recommended service selections for the Nixtec VPS
+## Recommended service selections for external services
 
 For the external services previously configured, choose:
 

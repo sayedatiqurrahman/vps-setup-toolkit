@@ -2,17 +2,23 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.1.5] - 2026-11-23
+
+### Removed
+
+- Remaining provider-specific branding from the service presets and setup guide.
+
 ## [1.1.4] - 2026-11-23
 
 ### Removed
 
-- The Nixtec Systems collaboration credit from the README and startup banner.
+- The collaboration credit from the README and startup banner.
 
 ## [1.1.3] - 2026-11-23
 
 ### Changed
 
-- Credits now list **Nixtec Systems** as a collaborating company alongside Programming Light in the README and the toolkit's startup banner.
+- Credits temporarily listed an additional collaborating company alongside Programming Light in the README and the toolkit's startup banner.
 
 ## [1.1.2] - 2026-11-23
 

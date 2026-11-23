@@ -17,9 +17,9 @@
 set -Eeuo pipefail
 
 APP_NAME="vps-setup"
-APP_VERSION="1.1.4"
+APP_VERSION="1.1.5"
 DEFAULT_REPO="https://github.com/sayedatiqurrahman/vps-setup-toolkit"
-DEFAULT_REF="v1.1.4"
+DEFAULT_REF="v1.1.5"
 CHECKSUM_BRANCH="checksums"
 INSTALL_DIR="${VPS_SETUP_HOME:-/usr/local/lib/vps-setup-toolkit}"
 WRAPPER_PATH="${VPS_SETUP_WRAPPER:-/usr/local/sbin/vps-setup}"

@@ -68,8 +68,8 @@ Catalog IDs 1-20 (from the guide):
 | 15 | Elasticsearch | TCP 9200,9300 |
 | 16 | RabbitMQ | TCP 5671,5672 |
 | 17 | MQTT | TCP 1883,8883 |
-| 18 | Nixtec external MariaDB | TCP 23306 |
-| 19 | Nixtec Garage/S3 | TCP 24900 |
+| 18 | External MariaDB | TCP 23306 |
+| 19 | Garage/S3 endpoint | TCP 24900 |
 | 20 | SMS/REST API | TCP 443 |
 
 IDs 21/22 accept custom TCP/UDP ports. All input is validated (1-65535), de-duplicated and persisted. Commands inside the selector:

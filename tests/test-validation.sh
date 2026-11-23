@@ -74,7 +74,7 @@ assert_false valid_ipv4_cidr 10.0.0.0/abc
 # --- service catalog --------------------------------------------------------
 line="$(service_line 18)"
 check "service 18 id" "18" "$(cut -d'|' -f1 <<<"$line")"
-check "service 18 name" "Nixtec external MariaDB" "$(cut -d'|' -f2 <<<"$line")"
+check "service 18 name" "External MariaDB" "$(cut -d'|' -f2 <<<"$line")"
 check "service 18 ports" "23306" "$(cut -d'|' -f3 <<<"$line")"
 assert_false service_line 99
 
