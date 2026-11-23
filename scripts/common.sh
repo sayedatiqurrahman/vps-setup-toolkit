@@ -8,7 +8,7 @@
 COMMON_LOADED=1
 
 APP_NAME="vps-setup"
-APP_VERSION="1.1.3"
+APP_VERSION="1.1.4"
 TOOLKIT_NAME="VPS Setup Toolkit"
 
 # Persistent state. /etc/default/vps-setup is kept for compatibility with the
@@ -88,7 +88,6 @@ print_banner(){
 ║     \_/  |_|   |____/  |____/|_____|_| \_| |_| |___|_| \_|_____|_____|  ║
 ╚═════════════════════════════════════════════════════════════════════════╝
         VPS SENTINEL  |  Powered by Programming Light
-        In collaboration with Nixtec Systems
         Developed by Sayed Atiqur Rahman
 BANNER
 }

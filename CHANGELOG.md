@@ -2,6 +2,12 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.1.4] - 2026-11-23
+
+### Removed
+
+- The Nixtec Systems collaboration credit from the README and startup banner.
+
 ## [1.1.3] - 2026-11-23
 
 ### Changed

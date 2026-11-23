@@ -12,7 +12,7 @@
 
 **VPS Setup Toolkit** — one command to prepare, secure and maintain a Linux VPS.
 
-> Powered by **Programming Light** · In collaboration with **Nixtec Systems** · Developed by **Sayed Atiqur Rahman**
+> Powered by **Programming Light** · Developed by **Sayed Atiqur Rahman**
 
 VPS Sentinel installs only what you select, keeps inbound access restrictive by default, and safely coexists with Docker, Dokploy, Coolify, Traefik, UFW and existing nftables rulesets. It is open source under the MIT license.
 
@@ -41,10 +41,10 @@ VPS Sentinel installs only what you select, keeps inbound access restrictive by 
 Run this on your VPS as root (or with `sudo` available). No cloning required:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.3/install.sh -o install.sh && sudo bash install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.4/install.sh -o install.sh && sudo bash install.sh
 ```
 
-That is it. The command is pinned to release `v1.1.3`: the installer downloads that release's archive and **automatically verifies its SHA-256** against the checksum published in the `checksums` branch. No warnings, no manual hash setup — safe for production.
+That is it. The command is pinned to release `v1.1.4`: the installer downloads that release's archive and **automatically verifies its SHA-256** against the checksum published in the `checksums` branch. No warnings, no manual hash setup — safe for production.
 
 The installer places the toolkit in `/usr/local/lib/vps-setup-toolkit`, creates the `vps-setup` launcher, and opens the interactive menu.
 
@@ -192,7 +192,7 @@ Add `--install-only` to install without opening the menu.
 The pinned [quick installation](#quick-installation) verifies SHA-256 automatically. For a custom ref or archive, supply the hash explicitly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.3/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.4/install.sh -o install.sh
 export VPS_SETUP_REF=main
 export VPS_SETUP_ARCHIVE_SHA256="<sha256-of-archive-tar.gz>"
 sudo bash install.sh
@@ -216,7 +216,7 @@ A custom ref/archive without a supplied hash or signature is rejected by default
 | Variable | Purpose | Default |
 |---|---|---|
 | `VPS_SETUP_REPO_URL` | GitHub repo used to build the codeload URL | `https://github.com/sayedatiqurrahman/vps-setup-toolkit` |
-| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.1.3` (pinned release) |
+| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.1.4` (pinned release) |
 | `VPS_SETUP_ARCHIVE_URL` | Explicit archive URL (any host) | derived from repo URL |
 | `VPS_SETUP_ARCHIVE_SHA256` | Expected archive SHA-256 | published checksum for pinned release |
 | `VPS_SETUP_SIGNATURE_URL` | Detached GPG signature URL | unset |

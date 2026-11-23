@@ -116,7 +116,6 @@ set -e
 check "installed menu starts" "0" "$menu_rc"
 assert_true "installed menu shows usage" grep -q "Usage:" "$TEST_TMP/menu.stdout.log"
 assert_true "banner shown before help" grep -q "VPS SENTINEL" "$TEST_TMP/menu.stdout.log"
-assert_true "banner credits Nixtec Systems" grep -q "Nixtec Systems" "$TEST_TMP/menu.stdout.log"
 assert_false "installed menu has no source errors" grep -q "No such file or directory" "$TEST_TMP/menu.stderr.log"
 
 # Simulate the first interactive launch (the installer execs the menu with no
