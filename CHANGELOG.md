@@ -18,6 +18,7 @@ All notable changes to the VPS Setup Toolkit are documented here.
 ### Fixed
 
 - Remote installation no longer reports success without copying any files: status output from `bootstrap_download` is no longer captured into `SOURCE_ROOT`, and the installer now fails loudly when required files (`menu.sh`, `install.sh`, `scripts/common.sh`, `config/services.conf`) are missing from the install directory.
+- `menu.sh` no longer builds module paths as `scripts/scripts/<module>.sh`; it now sources each module directly from `SCRIPT_DIR`, so the menu starts after a fresh remote install.
 - Toolkit version strings aligned with the changelog (`1.1.0`).
 
 ### Removed

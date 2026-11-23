@@ -32,19 +32,19 @@ assert_false(){
 # --- fixtures ---------------------------------------------------------------
 FAKE_SRC="$TEST_TMP/fake-source"
 mkdir -p "$FAKE_SRC/scripts" "$FAKE_SRC/config"
-printf '%s\n' '#!/usr/bin/env bash' 'echo fake-common' >"$FAKE_SRC/scripts/common.sh"
-printf '%s\n' '1|Web|80|443|test' >"$FAKE_SRC/config/services.conf"
-printf '%s\n' '#!/usr/bin/env bash' 'echo fake-menu' >"$FAKE_SRC/menu.sh"
-printf '%s\n' '#!/usr/bin/env bash' 'echo fake-installer' >"$FAKE_SRC/install.sh"
-chmod +x "$FAKE_SRC/menu.sh"
+cp "$ROOT_DIR/menu.sh" "$ROOT_DIR/install.sh" "$FAKE_SRC/"
+cp "$ROOT_DIR"/scripts/*.sh "$FAKE_SRC/scripts/"
+cp "$ROOT_DIR/config/services.conf" "$FAKE_SRC/config/"
+chmod +x "$FAKE_SRC/menu.sh" "$FAKE_SRC/install.sh"
 tar -czf "$TEST_TMP/good.tar.gz" -C "$FAKE_SRC" .
 
-# Archive that is missing menu.sh: the installer must refuse to report success.
+# Layout passes the bootstrap check but install.sh is missing, so the
+# post-copy verification must reject it instead of reporting success.
 BROKEN_SRC="$TEST_TMP/broken-source"
 mkdir -p "$BROKEN_SRC/scripts" "$BROKEN_SRC/config"
-cp "$FAKE_SRC/scripts/common.sh" "$BROKEN_SRC/scripts/common.sh"
-cp "$FAKE_SRC/config/services.conf" "$BROKEN_SRC/config/services.conf"
-cp "$FAKE_SRC/install.sh" "$BROKEN_SRC/install.sh"
+cp "$ROOT_DIR/menu.sh" "$BROKEN_SRC/"
+cp "$ROOT_DIR"/scripts/*.sh "$BROKEN_SRC/scripts/"
+cp "$ROOT_DIR/config/services.conf" "$BROKEN_SRC/config/"
 tar -czf "$TEST_TMP/broken.tar.gz" -C "$BROKEN_SRC" .
 
 mkdir -p "$TEST_TMP/bin"
@@ -98,6 +98,16 @@ assert_true "wrapper points at installed menu" check_true_wrapper
 assert_true "completion logged" grep -q "Installation complete" "$TEST_TMP/good.stdout.log"
 assert_true "download status goes to stderr" grep -q "Downloading toolkit archive" "$TEST_TMP/good.stderr.log"
 
+# The menu sources every module at startup, even for --help; this catches
+# broken source paths that a syntax-only check would miss.
+set +e
+bash "$GOOD_HOME/menu.sh" --help >"$TEST_TMP/menu.stdout.log" 2>"$TEST_TMP/menu.stderr.log"
+menu_rc=$?
+set -e
+check "installed menu starts" "0" "$menu_rc"
+assert_true "installed menu shows usage" grep -q "Usage:" "$TEST_TMP/menu.stdout.log"
+assert_false "installed menu has no source errors" grep -q "No such file or directory" "$TEST_TMP/menu.stderr.log"
+
 # --- incomplete archive is rejected ----------------------------------------
 BAD_HOME="$TEST_TMP/install-bad"
 BAD_WRAPPER="$TEST_TMP/sbin/vps-setup-bad"
@@ -106,7 +116,7 @@ run_installer "$TEST_TMP/broken.tar.gz" "$BAD_HOME" "$BAD_WRAPPER" bad
 bad_rc=$?
 set -e
 assert_false "incomplete archive exits nonzero" test "$bad_rc" -eq 0
-assert_true "incomplete archive reports an error" grep -q "\[ERROR\]" "$TEST_TMP/bad.stderr.log"
+assert_true "incomplete archive reports missing file" grep -q "Installation is incomplete" "$TEST_TMP/bad.stderr.log"
 assert_false "incomplete archive does not report success" grep -q "Installation complete" "$TEST_TMP/bad.stdout.log"
 
 printf '\nInstaller tests: %d passed, %d failed\n' "$PASS" "$FAIL"
