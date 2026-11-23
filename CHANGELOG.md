@@ -11,7 +11,7 @@ All notable changes to the VPS Setup Toolkit are documented here.
 - Traefik container IP detection from Docker with a configurable `TRAEFIK_IP` fallback.
 - `VPS_SETUP_SKIP_FIREWALL=1` to opt out of the automatic firewall steps in `run ... --yes` mode.
 - `CONTRIBUTING.md` with open-source contribution opportunities, development workflow and safety guidelines.
-- Branded thin, Kali-style ASCII banner for **VPS Sentinel** (powered by Programming Light, developed by Sayed Atiqur Rahman) and a clickable table of contents in the README.
+- Branded classic figlet-style ASCII banner for **VPS Sentinel** (powered by Programming Light, developed by Sayed Atiqur Rahman) and a clickable table of contents in the README.
 - README restructured around the single-command installation; advanced alternatives and supported systems moved to the appendix.
 
 ### Removed
