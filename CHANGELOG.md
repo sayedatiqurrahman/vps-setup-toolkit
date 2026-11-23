@@ -2,6 +2,19 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.1.0] - 2026-11-23
+
+### Added
+
+- Firewall-first workflow: selecting any service-install category (1-8) now asks to configure UFW/nftables basics before installation and to choose outbound service access afterwards (one-by-one, standard/reputed preset, all 20 documented categories, or skip).
+- Automatic `docker_gwbridge` Traefik ingress rules (`DOKPLOY-INGRESS` and `DOKPLOY-RETURN`) when Docker Engine, Dokploy or Coolify is selected; the watcher restores them after reboots and bridge re-creation.
+- Traefik container IP detection from Docker with a configurable `TRAEFIK_IP` fallback.
+- `VPS_SETUP_SKIP_FIREWALL=1` to opt out of the automatic firewall steps in `run ... --yes` mode.
+
+### Removed
+
+- `AGENT.md` from the repository.
+
 ## [1.0.0] - 2026-11-23
 
 ### Added

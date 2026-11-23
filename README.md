@@ -129,6 +129,29 @@ Choose an option: 2,3,9
 
 Selecting `4` and `5` together (Dokploy and Coolify) requires an extra typed confirmation; they are never installed together automatically.
 
+### Firewall-first workflow
+
+Any selection that installs or configures a service (menu items **1-8**) now follows this order:
+
+1. **Before installation** — you are asked to configure UFW/nftables basics: default-deny inbound, default-allow outbound, baseline SSH/HTTP/HTTPS rules, the managed nftables chain, and the persistent watcher. This is done first so applications do not fail later because of missing database/mail/Docker rules.
+2. **Services are installed** in the order you selected.
+3. **After installation** — you are asked again to configure UFW/nftables and to choose outbound service access:
+   - `1` — choose services **one by one** (SMTP, IMAP, MySQL, Redis, S3, ...), with a `y/N` prompt per category;
+   - `2` — allow all **standard/reputed** services (Web/API, DNS, NTP, SSH/Git, SMTP, IMAP, POP3, SMS API);
+   - `3` — allow all 20 documented categories (still outbound-only);
+   - `0` — skip.
+
+`vps-setup run <ids> --yes` applies the safe defaults automatically (firewall basics first, standard preset afterwards). Set `VPS_SETUP_SKIP_FIREWALL=1` to opt out of both automatic steps.
+
+### Docker / Traefik ingress is automatic
+
+When you select Docker Engine, Dokploy or Coolify (menu items **3, 4, 5**), the toolkit enables managed ingress rules for `docker_gwbridge` automatically. The watcher keeps them live after reboots and bridge recreation:
+
+- `DOKPLOY-INGRESS` — public TCP 80/443, already DNATed, WAN → `docker_gwbridge` → Traefik IPv4.
+- `DOKPLOY-RETURN` — established/related traffic back from Traefik to the WAN interface.
+
+The Traefik address is detected from the running container when possible, otherwise `TRAEFIK_IP` from `/etc/default/vps-setup` is used (default `10.0.2.2`). You never need to insert these rules by hand.
+
 ### Example: allow container egress to remote services
 
 Inside **Firewall and Service Port Manager**, enter:
@@ -144,7 +167,7 @@ This permits outbound SMTP 587/465/25, IMAP 993/143, Nixtec MariaDB 23306, Garag
 - **Outbound selection** adds explicit `ufw allow out` rules and permits those destination ports in the toolkit-owned `inet cloud_dev vps_docker_forward` nftables chain for detected Docker bridges.
 - **Host inbound** rules are managed separately through UFW, optionally restricted to a trusted IPv4/CIDR. Blank source means public and always requires confirmation; sensitive ports require typed authorization.
 - **The managed nftables chain** is the only chain this toolkit flushes. It inserts at most one `jump vps_docker_forward` rule (comment `VPS-MANAGED-DOCKER-JUMP`) into an existing parent chain, validates generated rules with `nft -c` before applying them, and never creates a competing table/policy if the documented `inet cloud_dev forward` chain is missing.
-- **The watcher** reconciles the chain every 15 seconds using live interface/subnet discovery, so Docker bridge recreation and reboots are handled automatically. It runs as `vps-firewall-watch.service` under systemd, or as a managed cron entry on non-systemd Linux systems.
+- **The watcher** reconciles the chain every 15 seconds using live interface/subnet discovery, so Docker bridge recreation and reboots are handled automatically. It runs as `vps-firewall-watch.service` under systemd, or as a managed cron entry on non-systemd Linux systems. The managed chain also carries the `DOKPLOY-INGRESS` / `DOKPLOY-RETURN` rules for Traefik on `docker_gwbridge`.
 
 See [`docs/FIREWALL.md`](docs/FIREWALL.md) for the full explanation and rollback steps.
 

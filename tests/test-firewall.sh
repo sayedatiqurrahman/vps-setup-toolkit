@@ -287,5 +287,29 @@ check "systemd unit installed" "1" "$unit_ok"
 unit_src="$(toolkit_file systemd/vps-firewall-watch.service)"
 check_true "systemd unit has ExecStart" grep -q 'ExecStart=/usr/local/sbin/vps-firewall-watch' "$unit_src"
 
+# --- automatic docker_gwbridge / Traefik ingress rules -----------------------
+load_config
+ENABLE_DOKPLOY_INGRESS=1
+TRAEFIK_IP="10.0.2.2"
+TRAEFIK_BRIDGE="docker_gwbridge"
+save_config
+nft_apply
+rules="$(cat "$NFT_STATE_FILE")"
+check_true "ingress has DOKPLOY-INGRESS comment" grep -q 'DOKPLOY-INGRESS' <<<"$rules"
+check_true "return has DOKPLOY-RETURN comment" grep -q 'DOKPLOY-RETURN' <<<"$rules"
+check_true "ingress targets docker_gwbridge" grep -q 'oifname "docker_gwbridge"' <<<"$rules"
+check_true "return rule uses established state" grep -q "ct state '{ established, related }'" <<<"$rules"
+
+# --- guided post-install service presets ------------------------------------
+load_config
+printf '2\ny\n' | firewall_service_menu >/dev/null 2>&1 || true
+load_config
+check "standard preset applied" "$STANDARD_SERVICE_IDS" "$SELECTED_SERVICE_IDS"
+
+# --- preflight enables ingress for Docker-related selections ----------------
+firewall_preflight 0 3 >/dev/null 2>&1 || true
+load_config
+check "docker selection enables ingress" "1" "$ENABLE_DOKPLOY_INGRESS"
+
 printf '\nFirewall tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 )) || exit 1

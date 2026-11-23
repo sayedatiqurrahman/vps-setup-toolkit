@@ -78,15 +78,47 @@ The unit uses `Restart=always`, `NoNewPrivileges=true`, `PrivateTmp=true` and re
 
 UFW is the host-firewall backend the toolkit manages. If UFW is unavailable on a given distribution, base setup warns and skips host-firewall configuration; the toolkit never disables or replaces another firewall (for example firewalld) on its own.
 
-## Dokploy ingress (optional)
+## Guided firewall workflow
 
-When enabled, the managed chain allows already-DNATed TCP 80/443 from the WAN to a configurable Traefik address on `docker_gwbridge` (`TRAEFIK_IP`, `TRAEFIK_BRIDGE`). It never exposes the dashboard ports and never opens Docker API TCP 2375/2376.
+Selecting any service-install category (menu items 1-8) triggers:
+
+1. **Pre-install prompt** — UFW defaults (`deny incoming`, `allow outgoing`, baseline SSH/HTTP/HTTPS), the managed nftables chain and the watcher are configured before packages are installed. This prevents the common "database/mail/Docker apps cannot connect" failures caused by applying firewall rules too late.
+2. **Post-install prompt** — after the selected services finish, you can configure outbound access via:
+   - **one-by-one** (`y/N` per catalog category, including SMTP, IMAP, MySQL, Redis, S3),
+   - **standard/reputed preset** — IDs `1 2 3 4 5 6 7 20` (Web/API, DNS, NTP, SSH/Git, SMTP, IMAP, POP3, SMS API),
+   - **all 20 documented categories** — the full catalog, still outbound-only,
+   - **skip**.
+
+`vps-setup run <ids> --yes` applies the firewall basics and the standard preset without prompting. Set `VPS_SETUP_SKIP_FIREWALL=1` to disable both automatic steps.
+
+## Dokploy / Coolify / Docker ingress (automatic)
+
+When menu item **3**, **4** or **5** is selected, `ENABLE_DOKPLOY_INGRESS` is enabled in `/etc/default/vps-setup`. As soon as `docker_gwbridge` exists, the watcher generates two rules in the managed chain:
+
+```nft
+# Allow incoming public HTTP/HTTPS traffic to the current Traefik container
+add rule inet cloud_dev vps_docker_forward \
+  iifname "<wan>" oifname "docker_gwbridge" \
+  ip daddr <traefik-ip> tcp dport { 80, 443 } \
+  ct status dnat counter accept comment "DOKPLOY-INGRESS"
+
+# Allow established return traffic from Traefik
+add rule inet cloud_dev vps_docker_forward \
+  iifname "docker_gwbridge" oifname "<wan>" \
+  ip saddr <traefik-ip> ct state { established, related } \
+  counter accept comment "DOKPLOY-RETURN"
+```
+
+These are the managed-chain equivalent of inserting the same matches into `inet cloud_dev forward`; the chain is jumped from that forward chain, so the effect is identical while keeping all toolkit rules in one place. The Traefik address is read from the running container when Docker is available, otherwise `TRAEFIK_IP` is used (default `10.0.2.2`, overridable in config). `TRAEFIK_BRIDGE` defaults to `docker_gwbridge`.
+
+Because the watcher regenerates the rules from live interfaces, they survive VPS reboots, Docker daemon restarts and bridge re-creation with no manual `nft insert rule` commands. It never exposes dashboard ports or Docker API TCP 2375/2376.
 
 ## Verification
 
 ```bash
 ufw status verbose
 nft -a list chain inet cloud_dev vps_docker_forward
+nft -a list chain inet cloud_dev vps_docker_forward | grep DOKPLOY   # ingress rules
 ip -br -4 addr | grep -E 'docker|br-'
 ip -4 route show default
 systemctl status vps-firewall-watch.service    # systemd hosts

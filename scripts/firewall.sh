@@ -38,6 +38,12 @@ ENABLE_DOKPLOY_INGRESS=0
 TRAEFIK_IP="10.0.2.2"
 TRAEFIK_BRIDGE="docker_gwbridge"
 
+# Outbound presets. "Standard" means the well-known services a typical server
+# needs for updates, DNS, time, git and mail. Database/S3 categories are kept
+# out of this preset on purpose; they are available in the full catalog.
+STANDARD_SERVICE_IDS="1 2 3 4 5 6 7 20"
+ALL_SERVICE_IDS="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
+
 NFT_RULES=()
 
 # ---------------------------------------------------------------------------
@@ -260,8 +266,8 @@ preview_and_apply(){
   CUSTOM_TCP_PORTS="$new_tcp_custom"
   CUSTOM_UDP_PORTS="$new_udp_custom"
   recompute_effective_ports
-  save_config || return 1
   ufw_apply_managed_egress || warn "UFW rules could not be updated."
+  save_config || return 1
   nft_apply || warn "nftables rules could not be updated now; the watcher will retry."
   start_watcher || warn "Watcher installation failed; run repair to retry."
   success "Outbound service selection saved and applied."
@@ -319,6 +325,129 @@ service_selector(){
         ;;
     esac
   done
+}
+
+# ---------------------------------------------------------------------------
+# Guided firewall setup (before and after service installation)
+# ---------------------------------------------------------------------------
+
+# Preset selection. Custom ports from the existing config are preserved.
+apply_service_preset(){
+  local ids="$1" label="$2" nonint="${3:-0}"
+  load_config || return 1
+  section "Outbound services: ${label}"
+  printf 'IDs to allow (outbound only): %s\n' "$ids"
+  printf 'Existing custom TCP/UDP ports are preserved.\n'
+  if (( nonint )); then
+    SELECTED_SERVICE_IDS="$ids"
+    recompute_effective_ports
+    ufw_apply_managed_egress || warn "UFW egress rules could not be updated."
+    save_config || return 1
+    nft_apply || warn "nftables rules could not be updated now; the watcher will retry."
+    start_watcher || warn "Watcher installation failed."
+    success "Outbound services applied: ${label}."
+    return 0
+  fi
+  preview_and_apply "$ids" "${CUSTOM_TCP_PORTS:-}" "${CUSTOM_UDP_PORTS:-}"
+}
+
+service_prompt_one_by_one(){
+  local file sid name tcp udp note answer selected=""
+  file="$(services_catalog_file)" || return 1
+  load_config || return 1
+  section "Outbound services - one by one"
+  printf 'Answer y to allow OUTBOUND connections to each category. No inbound port is opened.\n'
+  while IFS='|' read -r sid name tcp udp note; do
+    sid="${sid//$'\r'/}"
+    [[ -z "$sid" || "$sid" == \#* ]] && continue
+    name="${name//$'\r'/}"
+    read -r -p "Allow ${name} (TCP: ${tcp:--}, UDP: ${udp:--})? [y/N]: " answer || return 0
+    if [[ "$answer" =~ ^[Yy]$ ]]; then
+      selected+="$((10#$sid)) "
+    fi
+  done <"$file"
+  preview_and_apply "${selected% }" "${CUSTOM_TCP_PORTS:-}" "${CUSTOM_UDP_PORTS:-}"
+}
+
+firewall_service_menu(){
+  local answer
+  section "Outbound service access"
+  cat <<'SVC'
+ 1) Choose services one by one (SMTP, IMAP, databases, ...)
+ 2) Allow all standard/reputed services (Web, DNS, NTP, SSH/Git, mail, SMS API)
+ 3) Allow all 20 documented categories (outbound only)
+ 0) Skip
+SVC
+  read -r -p "Choose an option: " answer || return 0
+  case "$answer" in
+    1) service_prompt_one_by_one ;;
+    2) apply_service_preset "$STANDARD_SERVICE_IDS" "standard/reputed services" ;;
+    3) apply_service_preset "$ALL_SERVICE_IDS" "all documented categories" ;;
+    0|q|Q) log "Outbound service selection skipped." ;;
+    *) warn "Invalid choice; no changes made." ;;
+  esac
+}
+
+# Run BEFORE service installation. interactive=0 applies safe defaults without
+# prompting (used by `vps-setup run ... --yes`).
+firewall_preflight(){
+  local interactive="${1:-1}" id docker_selected=0
+  shift || true
+  section "Firewall setup before services"
+  if (( interactive )); then
+    if ! confirm "Configure UFW/nftables basics now (recommended before installing services)?"; then
+      warn "Firewall basics skipped. Missing outbound rules can break databases, mail and Docker apps."
+      return 0
+    fi
+  fi
+  load_config || return 1
+  if ! command_exists ufw || ! command_exists nft; then
+    log "Installing firewall tools before services (ufw, nftables, iproute2)."
+    pkg_install ufw nftables iproute2 || warn "Some firewall tools could not be installed."
+  fi
+  if command_exists ufw; then
+    ufw_init || warn "UFW initialization failed; review the log."
+  else
+    warn "UFW is unavailable; configure your host firewall manually."
+  fi
+  for id in "$@"; do
+    case "$id" in 3|4|5) docker_selected=1 ;; esac
+  done
+  if (( docker_selected )); then
+    ENABLE_DOKPLOY_INGRESS=1
+    log "Automatic docker_gwbridge/Traefik ingress rules enabled; the watcher will keep them applied."
+  fi
+  save_config || return 1
+  nft_apply || warn "nftables chain could not be applied now; the watcher will retry."
+  start_watcher || warn "Watcher installation failed; use Repair and Recovery to retry."
+  success "Firewall basics configured."
+}
+
+# Run AFTER service installation. interactive=0 applies the standard preset
+# without prompting.
+firewall_postflight(){
+  local interactive="${1:-1}"
+  section "Firewall configuration after services"
+  if (( interactive )); then
+    if ! confirm "Configure UFW/nftables and allow outbound services now?"; then
+      log "Firewall service selection skipped."
+      return 0
+    fi
+  fi
+  load_config || return 1
+  if command_exists ufw; then
+    ufw_init || warn "UFW initialization failed; review the log."
+  else
+    warn "UFW is unavailable; host firewall configuration was skipped."
+  fi
+  nft_apply || warn "nftables chain could not be applied now; the watcher will retry."
+  start_watcher || warn "Watcher installation failed; use Repair and Recovery to retry."
+  if (( interactive )); then
+    firewall_service_menu
+  else
+    log "Non-interactive run: applying the standard/reputed outbound service preset."
+    apply_service_preset "$STANDARD_SERVICE_IDS" "standard/reputed services (non-interactive default)" 1
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -386,15 +515,19 @@ ufw_delete_out(){
 
 ufw_apply_managed_egress(){
   command_exists ufw || { warn "ufw is not installed; skipping UFW egress rules."; return 1; }
-  local p added_tcp="" added_udp=""
+  local p added_tcp="" added_udp="" kept_tcp="" kept_udp=""
   for p in $MANAGED_UFW_TCP; do
-    if [[ " ${TCP_EGRESS_PORTS:-} " != *" ${p} "* ]]; then
+    if [[ " ${TCP_EGRESS_PORTS:-} " == *" ${p} "* ]]; then
+      kept_tcp+="$p "
+    else
       ufw_delete_out "$p" tcp
       log "Removed managed UFW egress rule ${p}/tcp."
     fi
   done
   for p in $MANAGED_UFW_UDP; do
-    if [[ " ${UDP_EGRESS_PORTS:-} " != *" ${p} "* ]]; then
+    if [[ " ${UDP_EGRESS_PORTS:-} " == *" ${p} "* ]]; then
+      kept_udp+="$p "
+    else
       ufw_delete_out "$p" udp
       log "Removed managed UFW egress rule ${p}/udp."
     fi
@@ -411,8 +544,10 @@ ufw_apply_managed_egress(){
       added_udp+="$p "
     fi
   done
-  MANAGED_UFW_TCP="${added_tcp% }"
-  MANAGED_UFW_UDP="${added_udp% }"
+  # Keep ownership of rules we added earlier that are still wanted, otherwise
+  # a later run would forget them and never be able to remove them.
+  MANAGED_UFW_TCP="$(filter_ports "${kept_tcp}${added_tcp}")"
+  MANAGED_UFW_UDP="$(filter_ports "${kept_udp}${added_udp}")"
   log "Managed UFW outbound rules reconciled."
 }
 
@@ -547,6 +682,26 @@ bridge_inventory(){
   done
 }
 
+# Prefer the live Traefik container address on the selected bridge. Falls back
+# to TRAEFIK_IP from config when Docker is unavailable or the address is not
+# readable, so the watcher can still install a stable rule set.
+traefik_ip_for_bridge(){
+  local detected="" fmt
+  if command_exists docker; then
+    detected="$(docker ps --format '{{.ID}} {{.Image}}' 2>/dev/null \
+      | awk 'tolower($0) ~ /traefik/ { print $1; exit }')"
+    if [[ -n "$detected" ]]; then
+      fmt="{{index .NetworkSettings.Networks \"${TRAEFIK_BRIDGE}\" \"IPAddress\"}}"
+      detected="$(docker inspect -f "$fmt" "$detected" 2>/dev/null)"
+    fi
+  fi
+  if valid_ipv4 "$detected" && [[ "$detected" != "<no value>" ]]; then
+    printf '%s\n' "$detected"
+  else
+    printf '%s\n' "$TRAEFIK_IP"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Toolkit-owned nftables chain
 # ---------------------------------------------------------------------------
@@ -587,7 +742,7 @@ nft_cleanup_duplicate_jumps(){
 }
 
 build_nft_ruleset(){
-  local wan tcp_set="" udp_set="" bridge subnet
+  local wan tcp_set="" udp_set="" bridge subnet tip=""
   NFT_RULES=()
   wan="$(get_wan)"
   [[ -n "$wan" ]] || { warn "No default-route interface detected."; return 1; }
@@ -612,10 +767,18 @@ build_nft_ruleset(){
     NFT_RULES+=("add rule ${NFT_FAMILY} ${NFT_TABLE} ${NFT_MANAGED} iifname \"${wan}\" oifname \"${bridge}\" ip daddr ${subnet} ct state '{ established, related }' counter accept")
   done < <(bridge_inventory)
 
-  if config_bool "$ENABLE_DOKPLOY_INGRESS" && ip link show "$TRAEFIK_BRIDGE" >/dev/null 2>&1; then
-    NFT_RULES+=("add rule ${NFT_FAMILY} ${NFT_TABLE} ${NFT_MANAGED} iifname \"${wan}\" oifname \"${TRAEFIK_BRIDGE}\" ip daddr ${TRAEFIK_IP} tcp dport '{ 80, 443 }' ct status dnat counter accept")
-  elif config_bool "$ENABLE_DOKPLOY_INGRESS"; then
-    warn "Dokploy ingress enabled but bridge ${TRAEFIK_BRIDGE} is not present; the watcher will retry."
+  # Automatic Traefik ingress for Docker-based panels. These rules live in the
+  # toolkit-managed chain, which is jumped from the existing forward chain, and
+  # carry stable comments so the watcher can restore them after any reboot or
+  # docker_gwbridge recreation without manual nft commands.
+  if config_bool "$ENABLE_DOKPLOY_INGRESS"; then
+    if ip link show "$TRAEFIK_BRIDGE" >/dev/null 2>&1; then
+      tip="$(traefik_ip_for_bridge)"
+      NFT_RULES+=("add rule ${NFT_FAMILY} ${NFT_TABLE} ${NFT_MANAGED} iifname \"${wan}\" oifname \"${TRAEFIK_BRIDGE}\" ip daddr ${tip} tcp dport '{ 80, 443 }' ct status dnat counter accept comment \"DOKPLOY-INGRESS\"")
+      NFT_RULES+=("add rule ${NFT_FAMILY} ${NFT_TABLE} ${NFT_MANAGED} iifname \"${TRAEFIK_BRIDGE}\" oifname \"${wan}\" ip saddr ${tip} ct state '{ established, related }' counter accept comment \"DOKPLOY-RETURN\"")
+    else
+      warn "Dokploy ingress enabled but bridge ${TRAEFIK_BRIDGE} is not present; the watcher will retry."
+    fi
   fi
   return 0
 }
@@ -718,8 +881,8 @@ apply_firewall(){
   fi
   TCP_EGRESS_PORTS="$(filter_ports "${TCP_EGRESS_PORTS:-}")"
   UDP_EGRESS_PORTS="$(filter_ports "${UDP_EGRESS_PORTS:-}")"
-  save_config || return 1
   ufw_apply_managed_egress || warn "UFW egress rules were not updated."
+  save_config || return 1
   nft_apply || warn "nftables policy was not applied; the watcher will retry when the required chain exists."
   start_watcher || warn "Watcher installation failed; use Repair and Recovery to retry."
   success "Firewall configuration applied."

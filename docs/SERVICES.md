@@ -4,6 +4,8 @@ Every module checks prerequisites, avoids replacing existing installations, and 
 
 All modules use the OS detection performed in `scripts/common.sh`: they choose packages and service commands for the detected family (`debian`, `rhel`, `suse`, `arch`, `alpine`) and init system (`systemd`, `openrc`, `sysv`). Unsupported Linux OSes warn and continue with best-effort package-manager support; vendor-specific steps need `ALLOW_UNSUPPORTED_OS=1`.
 
+When any install category (menu 1-8) runs from the main menu, the toolkit asks for firewall basics **first** and for outbound service access **afterwards** (one-by-one, standard preset, all 20 categories, or skip). See [`FIREWALL.md`](FIREWALL.md#guided-firewall-workflow).
+
 ## Base VPS Setup (menu 1)
 
 Installs a family-appropriate set of core tools. On apt systems: `ca-certificates`, `curl`, `wget`, `gnupg`, `lsb-release`, `jq`, `git`, `ufw`, `nftables`, `iproute2`, `procps`, `systemd`. RPM systems use `gnupg2`, `firewalld`, `iproute` and `procps-ng`; other families get their native equivalents. Applies the documented UFW baseline where UFW exists: default deny inbound, default allow outbound, TCP 22/80/443 plus any alternate SSH port detected via `sshd -T`. If UFW is unavailable, base setup warns and leaves host-firewall configuration to you rather than disabling another firewall.
@@ -17,7 +19,7 @@ Installs a family-appropriate set of core tools. On apt systems: `ca-certificate
 
 ## Docker Engine (menu 3)
 
-Adds Docker's signed apt repository for Debian/Ubuntu-family systems using the detected codename and architecture, installs `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`, and enables the daemon. On other families, distribution Docker packages are used only when `ALLOW_UNSUPPORTED_OS=1` is set. The firewall watcher is installed in all cases (systemd unit or cron fallback). Docker's unauthenticated TCP API is never enabled.
+Adds Docker's signed apt repository for Debian/Ubuntu-family systems using the detected codename and architecture, installs `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`, and enables the daemon. On other families, distribution Docker packages are used only when `ALLOW_UNSUPPORTED_OS=1` is set. The firewall watcher is installed in all cases (systemd unit or cron fallback), and automatic `docker_gwbridge` Traefik ingress rules are enabled. Docker's unauthenticated TCP API is never enabled.
 
 ## Dokploy (menu 4) and Coolify (menu 5)
 
@@ -29,7 +31,7 @@ Both launchers:
 - download the official installer to a temporary file (never pipe directly into a shell),
 - show its SHA-256 before asking permission to execute.
 
-Dokploy additionally offers to enable HTTP/HTTPS forwarding to Traefik at `TRAEFIK_IP` on `TRAEFIK_BRIDGE`. Selecting both panels in one menu operation requires an explicit `BOTH-PANELS-INTENTIONAL` confirmation; they are never installed together automatically.
+Dokploy additionally enables managed HTTP/HTTPS forwarding to Traefik at `TRAEFIK_IP` on `TRAEFIK_BRIDGE` automatically when launched from the main menu; the rules (`DOKPLOY-INGRESS` / `DOKPLOY-RETURN`) are re-applied by the watcher after every reboot. Selecting both panels in one menu operation requires an explicit `BOTH-PANELS-INTENTIONAL` confirmation; they are never installed together automatically.
 
 ## PHP, Nginx and WordPress prerequisites (menus 6 and 7)
 

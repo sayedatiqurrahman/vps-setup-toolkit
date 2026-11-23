@@ -91,7 +91,8 @@ The typed confirmation `UNINSTALL` is required. Removal of the managed nftables 
 ## First-run checklist
 
 1. Keep an existing SSH session open.
-2. Run menu item **1) Base VPS Setup** on a fresh VPS.
-3. Install only the services you need (items 2-7).
-4. Use item **9)** for outbound service ports; item **10)** only for deliberate host inbound ports.
-5. Verify with item **12) System Status** and an external port check.
+2. Select the services you need (items 1-8). The toolkit asks to configure UFW/nftables **before** installing anything.
+3. When installation finishes, choose outbound access: one-by-one categories, the standard/reputed preset, all 20 documented categories, or skip.
+4. If you selected Docker Engine, Dokploy or Coolify, the `docker_gwbridge` Traefik ingress rules are enabled automatically and kept alive by the watcher.
+5. Use item **9)** to change outbound service ports later; item **10)** only for deliberate host inbound ports.
+6. Verify with item **12) System Status** and an external port check.

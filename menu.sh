@@ -76,6 +76,19 @@ print_selection_summary(){
   return 0
 }
 
+# Install/config operations that need working firewall rules before they run.
+is_service_action(){
+  case "$1" in 1|2|3|4|5|6|7|8) return 0 ;; *) return 1 ;; esac
+}
+
+selection_has_service_actions(){
+  local id
+  for id in "$@"; do
+    is_service_action "$id" && return 0
+  done
+  return 1
+}
+
 run_action(){
   case "$1" in
     1) base_setup ;;
@@ -128,7 +141,13 @@ main_menu(){
     fi
     if print_selection_summary "${MENU_IDS[@]}"; then
       if confirm "Proceed with the selected operations?"; then
+        if selection_has_service_actions "${MENU_IDS[@]}"; then
+          firewall_preflight 1 "${MENU_IDS[@]}" || warn "Firewall preflight reported a problem."
+        fi
         execute_selection "${MENU_IDS[@]}" || warn "Some operations failed; returning to menu."
+        if selection_has_service_actions "${MENU_IDS[@]}"; then
+          firewall_postflight 1 || warn "Firewall post-configuration reported a problem."
+        fi
       else
         log "Selection cancelled; no changes made."
       fi
@@ -150,6 +169,8 @@ Usage:
   vps-setup --help             Show this help
 
 Non-interactive runs require --yes, which is the explicit confirmation.
+Service runs configure UFW/nftables first and apply the standard outbound
+service preset afterwards. Set VPS_SETUP_SKIP_FIREWALL=1 to opt out.
 USAGE
 }
 
@@ -174,7 +195,13 @@ case "${1:-menu}" in
     fi
     parse_menu_selection "$selection" 13 || die "Invalid selection (${MENU_PARSE_ERROR})."
     print_selection_summary "${MENU_IDS[@]}" || die "Selection rejected."
+    if selection_has_service_actions "${MENU_IDS[@]}" && [[ "${VPS_SETUP_SKIP_FIREWALL:-0}" != "1" ]]; then
+      firewall_preflight 0 "${MENU_IDS[@]}" || warn "Firewall preflight reported a problem."
+    fi
     execute_selection "${MENU_IDS[@]}"
+    if selection_has_service_actions "${MENU_IDS[@]}" && [[ "${VPS_SETUP_SKIP_FIREWALL:-0}" != "1" ]]; then
+      firewall_postflight 0 || warn "Firewall post-configuration reported a problem."
+    fi
     ;;
   status)
     need_root
