@@ -1,0 +1,74 @@
+# Installation
+
+## Requirements
+
+- Debian 12/13 or Ubuntu 22.04/24.04 (other versions need `ALLOW_UNSUPPORTED_OS=1`)
+- Root access (`sudo`)
+- `curl`, `tar`, `sha256sum` (or `gpg` for signature verification)
+- A provider console/rescue access path before changing firewall rules
+
+## Install from the repository
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/main/install.sh -o install.sh
+chmod 700 install.sh
+less install.sh                       # review before running
+export VPS_SETUP_ARCHIVE_SHA256="<expected sha256>"
+sudo bash install.sh
+```
+
+The installer:
+
+1. Downloads the archive from `VPS_SETUP_ARCHIVE_URL` or the configured GitHub repo/ref.
+2. Verifies SHA-256 and/or GPG signature when variables are supplied.
+3. Copies the toolkit to `/usr/local/lib/vps-setup-toolkit`.
+4. Creates `/usr/local/sbin/vps-setup`.
+5. Launches the interactive menu (unless `--install-only` is used).
+
+Environment variables:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `VPS_SETUP_REPO_URL` | GitHub repo used to build the codeload URL | `https://github.com/sayedatiqurrahman/vps-setup-toolkit` |
+| `VPS_SETUP_REF` | Branch/tag for the archive | `main` |
+| `VPS_SETUP_ARCHIVE_URL` | Explicit archive URL (any host) | derived from repo URL |
+| `VPS_SETUP_ARCHIVE_SHA256` | Expected archive SHA-256 | unset (warning) |
+| `VPS_SETUP_SIGNATURE_URL` | Detached GPG signature URL | unset |
+| `VPS_SETUP_GPG_KEY_URL` | Signing key URL | unset |
+| `VPS_SETUP_HOME` | Install directory override | `/usr/local/lib/vps-setup-toolkit` |
+| `VPS_SETUP_INSTALL_ONLY=1` | Install without launching menu | unset |
+
+## Install from a local clone
+
+```bash
+git clone https://github.com/sayedatiqurrahman/vps-setup-toolkit.git
+cd vps-setup-toolkit
+sudo bash install.sh --source-dir "$PWD"
+```
+
+## Upgrade / re-run
+
+Re-running the installer updates toolkit files while preserving `/etc/default/vps-setup`, state under `/etc/vps-setup/`, logs, firewall rules and installed packages.
+
+```bash
+sudo bash install.sh --install-only
+sudo vps-setup run 11 --yes    # optional repair pass after an upgrade
+```
+
+## Uninstall
+
+```bash
+sudo vps-setup              # choose 13) Uninstall Toolkit
+# or
+sudo /usr/local/lib/vps-setup-toolkit/scripts/uninstall.sh
+```
+
+The typed confirmation `UNINSTALL` is required. Removal of the managed nftables chain, UFW egress rules, config, state and logs is opt-in and handled separately. Unrelated firewall rules and installed packages are never removed automatically.
+
+## First-run checklist
+
+1. Keep an existing SSH session open.
+2. Run menu item **1) Base VPS Setup** on a fresh VPS.
+3. Install only the services you need (items 2-7).
+4. Use item **9)** for outbound service ports; item **10)** only for deliberate host inbound ports.
+5. Verify with item **12) System Status** and an external port check.
