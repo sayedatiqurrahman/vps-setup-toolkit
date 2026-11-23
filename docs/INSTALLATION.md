@@ -5,8 +5,10 @@
 On a fresh Linux VPS, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/main/install.sh -o install.sh && sudo bash install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.0/install.sh -o install.sh && sudo bash install.sh
 ```
+
+The command is pinned to release `v1.1.0`. The installer verifies the downloaded archive's SHA-256 against the checksum published in the `checksums` branch before installing anything, so no manual hash setup is needed for production use. A mismatch aborts the install.
 
 The installer copies the toolkit to `/usr/local/lib/vps-setup-toolkit`, creates `/usr/local/sbin/vps-setup`, and opens the interactive menu. No cloning is needed.
 
@@ -60,9 +62,16 @@ The quick install above is the recommended path for almost everyone. The notes b
 <summary>Show SHA-256 / GPG verification steps</summary>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.0/install.sh -o install.sh
 chmod 700 install.sh
 less install.sh                       # review before running
+sudo bash install.sh                  # pinned release: checksum verified automatically
+```
+
+For a custom ref or archive, supply the hash explicitly:
+
+```bash
+export VPS_SETUP_REF=main
 export VPS_SETUP_ARCHIVE_SHA256="<expected sha256>"
 sudo bash install.sh
 ```
@@ -75,12 +84,12 @@ export VPS_SETUP_GPG_KEY_URL="https://example.invalid/signing-key.asc"
 sudo bash install.sh
 ```
 
-If no verification variables are set, the installer warns and proceeds with an unverified archive. Production deployments should set a hash or signature.
+The pinned release is verified automatically. Custom refs/archives without a hash or signature are rejected; `--allow-unverified` (or `VPS_SETUP_ALLOW_UNVERIFIED=1`) is for local testing only.
 
 The installer:
 
 1. Downloads the archive from `VPS_SETUP_ARCHIVE_URL` or the configured GitHub repo/ref.
-2. Verifies SHA-256 and/or GPG signature when variables are supplied.
+2. Verifies SHA-256 against the published checksum (pinned release), a supplied hash, or a supplied GPG signature; aborts on failure.
 3. Copies the toolkit to `/usr/local/lib/vps-setup-toolkit`.
 4. Creates `/usr/local/sbin/vps-setup`.
 5. Launches the interactive menu (unless `--install-only` is used).
@@ -105,11 +114,12 @@ sudo bash install.sh --source-dir "$PWD"
 | Variable | Purpose | Default |
 |---|---|---|
 | `VPS_SETUP_REPO_URL` | GitHub repo used to build the codeload URL | `https://github.com/sayedatiqurrahman/vps-setup-toolkit` |
-| `VPS_SETUP_REF` | Branch/tag for the archive | `main` |
+| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.1.0` (pinned release) |
 | `VPS_SETUP_ARCHIVE_URL` | Explicit archive URL (any host) | derived from repo URL |
-| `VPS_SETUP_ARCHIVE_SHA256` | Expected archive SHA-256 | unset (warning) |
+| `VPS_SETUP_ARCHIVE_SHA256` | Expected archive SHA-256 | published checksum for pinned release |
 | `VPS_SETUP_SIGNATURE_URL` | Detached GPG signature URL | unset |
 | `VPS_SETUP_GPG_KEY_URL` | Signing key URL | unset |
+| `VPS_SETUP_ALLOW_UNVERIFIED=1` | Testing only: allow unverified download | unset (verification required) |
 | `VPS_SETUP_HOME` | Install directory override | `/usr/local/lib/vps-setup-toolkit` |
 | `VPS_SETUP_INSTALL_ONLY=1` | Install without launching menu | unset |
 | `ALLOW_UNSUPPORTED_OS=1` | Permit vendor-specific steps on non-primary OS families | unset |

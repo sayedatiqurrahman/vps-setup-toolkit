@@ -19,6 +19,8 @@ set -Eeuo pipefail
 APP_NAME="vps-setup"
 APP_VERSION="1.1.0"
 DEFAULT_REPO="https://github.com/sayedatiqurrahman/vps-setup-toolkit"
+DEFAULT_REF="v1.1.0"
+CHECKSUM_BRANCH="checksums"
 INSTALL_DIR="${VPS_SETUP_HOME:-/usr/local/lib/vps-setup-toolkit}"
 WRAPPER_PATH="${VPS_SETUP_WRAPPER:-/usr/local/sbin/vps-setup}"
 
@@ -39,16 +41,22 @@ Usage:
 Options:
   --install-only       Install files but do not launch the interactive menu.
   --source-dir DIR     Use a local checkout instead of downloading an archive.
-  --ref REF            Git ref used for the GitHub archive (default: main).
+  --ref REF            Git ref used for the GitHub archive (default: ${DEFAULT_REF}).
+  --allow-unverified   Skip the published SHA-256 check (testing only).
   --help, --version    Show help or version.
+
+The pinned default release is verified automatically against the SHA-256
+published in the ${CHECKSUM_BRANCH} branch. Set VPS_SETUP_ARCHIVE_SHA256
+when installing a custom ref/archive.
 
 Remaining arguments are passed to the toolkit menu (for example: status).
 USAGE
 }
 
 INSTALL_ONLY=0
+ALLOW_UNVERIFIED=0
 SOURCE_OPT=""
-REF="${VPS_SETUP_REF:-main}"
+REF="${VPS_SETUP_REF:-$DEFAULT_REF}"
 MENU_ARGS=()
 
 while (( $# > 0 )); do
@@ -56,6 +64,7 @@ while (( $# > 0 )); do
     --help|-h) usage; exit 0 ;;
     --version|-V) printf '%s\n' "$APP_VERSION"; exit 0 ;;
     --install-only) INSTALL_ONLY=1; shift ;;
+    --allow-unverified) ALLOW_UNVERIFIED=1; shift ;;
     --source-dir)
       [[ $# -ge 2 ]] || die "--source-dir requires a path."
       SOURCE_OPT="$2"; shift 2
@@ -91,8 +100,12 @@ find_source_root(){
 
 BOOTSTRAP_SOURCE_ROOT=""
 
+archive_sha256(){
+  sha256sum "$1" | awk '{print $1}'
+}
+
 bootstrap_download(){
-  local repo archive tmp owner repo_name found
+  local repo archive tmp owner repo_name found actual expected checksum_url verified=0
   command_exists curl || die "curl is required to bootstrap the toolkit."
   command_exists tar || die "tar is required to bootstrap the toolkit."
 
@@ -111,13 +124,22 @@ bootstrap_download(){
   # This function is called from a command substitution; keep status output on
   # stderr so only the resolved source path is captured by the caller.
   log "Downloading toolkit archive from ${archive}" >&2
-  curl -fsSL "$archive" -o "${tmp}/archive.tar.gz" || die "Archive download failed."
+  if ! curl -fsSL "$archive" -o "${tmp}/archive.tar.gz"; then
+    # A pinned ref is a tag; older callers used branch names. Try both.
+    if [[ "$archive" == *"/refs/heads/"* ]]; then
+      archive="${archive/\/refs\/heads\//\/refs\/tags\/}"
+      log "Retrying as a tag ref: ${archive}" >&2
+      curl -fsSL "$archive" -o "${tmp}/archive.tar.gz" || die "Archive download failed."
+    else
+      die "Archive download failed."
+    fi
+  fi
 
   if [[ -n "${VPS_SETUP_ARCHIVE_SHA256:-}" ]]; then
-    local actual
-    actual="$(sha256sum "${tmp}/archive.tar.gz" | awk '{print $1}')"
+    actual="$(archive_sha256 "${tmp}/archive.tar.gz")"
     [[ "${actual,,}" == "${VPS_SETUP_ARCHIVE_SHA256,,}" ]] || die "SHA-256 verification failed. Expected ${VPS_SETUP_ARCHIVE_SHA256}, got ${actual}."
-    log "Archive SHA-256 verified."
+    log "Archive SHA-256 verified against the supplied hash." >&2
+    verified=1
   fi
 
   if [[ -n "${VPS_SETUP_SIGNATURE_URL:-}" || -n "${VPS_SETUP_GPG_KEY_URL:-}" ]]; then
@@ -127,12 +149,34 @@ bootstrap_download(){
     curl -fsSL "$VPS_SETUP_GPG_KEY_URL" -o "${tmp}/signing-key.asc" || die "Signing key download failed."
     gpg --no-default-keyring --keyring "${tmp}/keyring.gpg" --import "${tmp}/signing-key.asc" >/dev/null 2>&1 || die "Cannot import signing key."
     gpg --no-default-keyring --keyring "${tmp}/keyring.gpg" --verify "${tmp}/archive.sig" "${tmp}/archive.tar.gz" >/dev/null 2>&1 || die "GPG signature verification failed."
-    log "Archive GPG signature verified."
+    log "Archive GPG signature verified." >&2
+    verified=1
   fi
 
-  if [[ -z "${VPS_SETUP_ARCHIVE_SHA256:-}" && -z "${VPS_SETUP_SIGNATURE_URL:-}" ]]; then
+  # Default production path: verify automatically against the checksum
+  # published for the pinned release. The checksum lives outside the archive
+  # in a separate branch so it cannot be forged by editing the release itself.
+  if (( verified == 0 )) && (( ALLOW_UNVERIFIED == 0 )) \
+     && [[ "${VPS_SETUP_ALLOW_UNVERIFIED:-0}" != "1" ]] \
+     && [[ -z "${VPS_SETUP_ARCHIVE_URL:-}" && "$repo" == "$DEFAULT_REPO" ]]; then
+    checksum_url="https://raw.githubusercontent.com/${owner}/${repo_name}/${CHECKSUM_BRANCH}/${REF}.sha256"
+    if curl -fsSL "$checksum_url" -o "${tmp}/expected.sha256" 2>/dev/null; then
+      expected="$(awk 'NR==1 {print $1}' "${tmp}/expected.sha256")"
+      [[ "$expected" =~ ^[[:xdigit:]]{64}$ ]] \
+        || die "Invalid checksum published at ${checksum_url}."
+      actual="$(archive_sha256 "${tmp}/archive.tar.gz")"
+      [[ "${actual,,}" == "${expected,,}" ]] \
+        || die "SHA-256 verification failed for ${REF}. Expected ${expected}, got ${actual}."
+      log "Archive SHA-256 verified against the published checksum for ${REF}." >&2
+      verified=1
+    else
+      die "No published SHA-256 checksum for ${REF} at ${checksum_url}. Use the pinned default release, set VPS_SETUP_ARCHIVE_SHA256, or pass --allow-unverified for testing."
+    fi
+  fi
+
+  if (( verified == 0 )); then
     warn "No SHA-256 or GPG verification was configured for the downloaded archive."
-    warn "For production use set VPS_SETUP_ARCHIVE_SHA256 (recommended) or both signature URLs."
+    warn "For production use the pinned release (verified automatically) or set VPS_SETUP_ARCHIVE_SHA256."
   fi
 
   tar -xzf "${tmp}/archive.tar.gz" -C "$tmp" || die "Archive extraction failed."

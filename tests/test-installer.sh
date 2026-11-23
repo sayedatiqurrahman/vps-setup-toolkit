@@ -51,14 +51,20 @@ mkdir -p "$TEST_TMP/bin"
 cat >"$TEST_TMP/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 out=""
+url=""
 while (( $# > 0 )); do
   case "$1" in
     -o) out="${2:-}"; shift 2 ;;
-    *) shift ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
   esac
 done
 [[ -n "$out" ]] || exit 1
-cp -- "$FAKE_ARCHIVE" "$out"
+if [[ "$url" == *.sha256 ]]; then
+  printf '%s\n' "$FAKE_SHA256" >"$out"
+else
+  cp -- "$FAKE_ARCHIVE" "$out"
+fi
 STUB
 chmod +x "$TEST_TMP/bin/curl"
 
@@ -67,15 +73,16 @@ awk '{ if ($0 == "need_root") print ": # root check stubbed for tests"; else pri
   "$ROOT_DIR/install.sh" >"$TEST_TMP/install-under-test.sh"
 
 run_installer(){
-  local archive="$1" home="$2" wrapper="$3" label="$4"
+  local archive="$1" home="$2" wrapper="$3" label="$4" checksum="${5:-}"
   mkdir -p -- "$(dirname -- "$wrapper")"
+  [[ -n "$checksum" ]] || checksum="$(sha256sum "$archive" | awk '{print $1}')"
   (
     cd -- "$TEST_TMP"
     FAKE_ARCHIVE="$archive" \
+    FAKE_SHA256="$checksum" \
     PATH="$TEST_TMP/bin:$PATH" \
     VPS_SETUP_HOME="$home" \
     VPS_SETUP_WRAPPER="$wrapper" \
-    VPS_SETUP_ARCHIVE_URL="file:///fake/archive.tar.gz" \
     VPS_SETUP_INSTALL_ONLY=1 \
       bash "$TEST_TMP/install-under-test.sh" >"$TEST_TMP/${label}.stdout.log" 2>"$TEST_TMP/${label}.stderr.log"
   )
@@ -97,6 +104,8 @@ check_true_wrapper(){ grep -q "$GOOD_HOME/menu.sh" "$GOOD_WRAPPER"; }
 assert_true "wrapper points at installed menu" check_true_wrapper
 assert_true "completion logged" grep -q "Installation complete" "$TEST_TMP/good.stdout.log"
 assert_true "download status goes to stderr" grep -q "Downloading toolkit archive" "$TEST_TMP/good.stderr.log"
+assert_true "published checksum verified" grep -q "verified against the published checksum" "$TEST_TMP/good.stderr.log"
+assert_false "no verification warning" grep -q "No SHA-256 or GPG verification" "$TEST_TMP/good.stderr.log"
 
 # The menu sources every module at startup, even for --help; this catches
 # broken source paths that a syntax-only check would miss.
@@ -107,6 +116,18 @@ set -e
 check "installed menu starts" "0" "$menu_rc"
 assert_true "installed menu shows usage" grep -q "Usage:" "$TEST_TMP/menu.stdout.log"
 assert_false "installed menu has no source errors" grep -q "No such file or directory" "$TEST_TMP/menu.stderr.log"
+
+# --- checksum mismatch is rejected -----------------------------------------
+MISMATCH_HOME="$TEST_TMP/install-mismatch"
+MISMATCH_WRAPPER="$TEST_TMP/sbin/vps-setup-mismatch"
+set +e
+run_installer "$TEST_TMP/good.tar.gz" "$MISMATCH_HOME" "$MISMATCH_WRAPPER" mismatch \
+  "0000000000000000000000000000000000000000000000000000000000000000"
+mismatch_rc=$?
+set -e
+assert_false "checksum mismatch exits nonzero" test "$mismatch_rc" -eq 0
+assert_true "checksum mismatch reports failure" grep -q "SHA-256 verification failed" "$TEST_TMP/mismatch.stderr.log"
+assert_false "checksum mismatch does not install menu" test -f "$MISMATCH_HOME/menu.sh"
 
 # --- incomplete archive is rejected ----------------------------------------
 BAD_HOME="$TEST_TMP/install-bad"

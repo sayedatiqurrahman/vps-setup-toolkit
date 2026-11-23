@@ -13,7 +13,8 @@ All notable changes to the VPS Setup Toolkit are documented here.
 - `CONTRIBUTING.md` with open-source contribution opportunities, development workflow and safety guidelines.
 - Branded classic figlet-style ASCII banner for **VPS Sentinel** (powered by Programming Light, developed by Sayed Atiqur Rahman) and a clickable table of contents in the README.
 - README restructured around the single-command installation; advanced alternatives and supported systems moved to the appendix.
-- Installer bootstrap regression tests (`tests/test-installer.sh`) covering the remote archive install path and incomplete-archive rejection.
+- Production-safe default installation: the installer is pinned to release `v1.1.0` and automatically verifies the downloaded archive against a SHA-256 checksum published in the separate `checksums` branch. Custom refs/archives without a hash or signature are rejected; `--allow-unverified` is available for local testing only.
+- Installer bootstrap regression tests (`tests/test-installer.sh`) covering remote install, published-checksum verification, checksum mismatch rejection and incomplete-archive rejection.
 
 ### Fixed
 
