@@ -2,6 +2,17 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.1.1] - 2026-11-23
+
+### Added
+
+- Production-safe default installation: the installer is pinned to release `v1.1.1` and automatically verifies the downloaded archive against a SHA-256 checksum published in the separate `checksums` branch. Custom refs/archives without a hash or signature are rejected; `--allow-unverified` is available for local testing only.
+- Installer bootstrap regression tests (`tests/test-installer.sh`) covering remote install, published-checksum verification, checksum mismatch rejection and incomplete-archive rejection.
+
+### Fixed
+
+- Version tags are requested from `refs/tags` directly, so the pinned release download no longer logs a 404 retry.
+
 ## [1.1.0] - 2026-11-23
 
 ### Added
@@ -13,14 +24,12 @@ All notable changes to the VPS Setup Toolkit are documented here.
 - `CONTRIBUTING.md` with open-source contribution opportunities, development workflow and safety guidelines.
 - Branded classic figlet-style ASCII banner for **VPS Sentinel** (powered by Programming Light, developed by Sayed Atiqur Rahman) and a clickable table of contents in the README.
 - README restructured around the single-command installation; advanced alternatives and supported systems moved to the appendix.
-- Production-safe default installation: the installer is pinned to release `v1.1.0` and automatically verifies the downloaded archive against a SHA-256 checksum published in the separate `checksums` branch. Custom refs/archives without a hash or signature are rejected; `--allow-unverified` is available for local testing only.
-- Installer bootstrap regression tests (`tests/test-installer.sh`) covering remote install, published-checksum verification, checksum mismatch rejection and incomplete-archive rejection.
 
 ### Fixed
 
 - Remote installation no longer reports success without copying any files: status output from `bootstrap_download` is no longer captured into `SOURCE_ROOT`, and the installer now fails loudly when required files (`menu.sh`, `install.sh`, `scripts/common.sh`, `config/services.conf`) are missing from the install directory.
 - `menu.sh` no longer builds module paths as `scripts/scripts/<module>.sh`; it now sources each module directly from `SCRIPT_DIR`, so the menu starts after a fresh remote install.
-- Toolkit version strings aligned with the changelog (`1.1.0`).
+
 
 ### Removed
 
