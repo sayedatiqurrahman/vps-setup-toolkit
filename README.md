@@ -1,6 +1,6 @@
 # VPS Setup Toolkit
 
-A production-oriented, interactive Bash toolkit for preparing fresh **Debian 12/13** and **Ubuntu 22.04/24.04** VPS servers through one entry point. It installs only what you select, keeps inbound access restrictive by default, and safely coexists with Docker, Dokploy, Coolify, Traefik, UFW and existing nftables rulesets.
+A production-oriented, interactive Bash toolkit for preparing a fresh **Linux** VPS through one entry point — on any Linux distribution. The original guide's Debian/Ubuntu path is the best-tested one, but the toolkit detects the OS family, package manager and init system at runtime and degrades gracefully elsewhere. It installs only what you select, keeps inbound access restrictive by default, and safely coexists with Docker, Dokploy, Coolify, Traefik, UFW and existing nftables rulesets.
 
 > The original specification, [`complete-vps-setup-security-guide.md`](complete-vps-setup-security-guide.md), is kept intact in this repository and remains the primary design reference.
 
@@ -10,20 +10,42 @@ A production-oriented, interactive Bash toolkit for preparing fresh **Debian 12/
 - **Multi-select operations**: enter `2,3,4,9` to run several categories in one pass, with a summary and confirmation first.
 - **Outbound-only service selector**: 20 documented categories plus custom TCP/UDP ports, duplicate prevention, add/remove handling, and persistent config.
 - **Inbound safety**: default public access is SSH (22), HTTP (80), HTTPS (443) and any detected alternate SSH port. Extra inbound ports require a trusted source CIDR or an explicit confirmation. Database, Redis, S3, Docker API and mail ports are never published automatically.
-- **Docker-aware firewall**: a dedicated nftables chain with dynamically detected Docker bridges/subnets, a single guarded jump from an existing parent chain, no full-ruleset flush, and a persistent systemd reconciler that recovers after reboots and bridge recreation.
+- **Docker-aware firewall**: a dedicated nftables chain with dynamically detected Docker bridges/subnets, a single guarded jump from an existing parent chain, no full-ruleset flush, and a persistent reconciler (systemd unit, with a cron fallback) that recovers after reboots and bridge recreation.
 - **Idempotent**: repeated runs do not duplicate UFW rules, nftables jumps, chains, services or configuration.
 - **Backups before changes**: configuration files, UFW state and nftables rulesets are backed up before modification.
 - **Repair/status/uninstall**: explicit recovery, read-only status, and uninstall that never removes unrelated firewall rules.
-- **Root checks, OS/arch detection, strict Bash, validated input, no `eval`, ShellCheck-friendly style.**
+- **OS-agnostic where possible**: runtime detection of OS family, package manager and init system, with best-effort support for apt, dnf/yum, apk, pacman and zypper; non-Linux systems are refused.
+- **Root checks, arch detection, strict Bash, validated input, no `eval`, ShellCheck-clean style.**
 
 ## Supported operating systems
 
-| OS | Versions | Notes |
-|---|---|---|
-| Debian | 12 (bookworm), 13 (trixie) | Primary target of the original guide |
-| Ubuntu | 22.04 (jammy), 24.04 (noble) | Supported by the toolkit; other versions require `ALLOW_UNSUPPORTED_OS=1` |
+**Any Linux OS can run this toolkit.** On each run it reads `/etc/os-release`, detects the OS family (`debian`, `rhel`, `suse`, `arch`, `alpine`, or `unknown`), selects a package manager (`apt`, `dnf`/`yum`, `zypper`, `pacman`, `apk`), and detects the init system (`systemd`, `openrc`, `sysv`, or none).
 
-Supported architectures for Docker repositories: `amd64`, `arm64`, `armhf`, `i386`, `riscv64`, `s390x`.
+| OS family | Package manager | Status |
+|---|---|---|
+| Debian 12/13, Ubuntu 22.04/24.04 | apt | Fully supported — primary test matrix from the original guide |
+| Other Debian derivatives (Linux Mint, Pop!_OS, Raspberry Pi OS, etc.) | apt | Uses the apt path; advisory compatibility warning |
+| RHEL family (RHEL, CentOS Stream, Rocky, AlmaLinux, Fedora, Amazon Linux) | dnf/yum | Best-effort distro packages; Docker/NodeSource repo steps require `ALLOW_UNSUPPORTED_OS=1` |
+| openSUSE / SLES | zypper | Best-effort distro packages |
+| Arch / Manjaro | pacman | Best-effort distro packages |
+| Alpine | apk | Best-effort distro packages |
+| Unrecognized Linux | auto-detected from available tools | Best-effort; missing packages are reported, not silently ignored |
+
+Rules for non-primary systems:
+
+- Non-Linux systems (e.g. macOS, BSD, Windows) are **refused**: the toolkit manages Linux packages and firewalls.
+- Unsupported OSes are **not** hard-blocked. They produce a warning and set `OS_SUPPORTED=0`; ordinary operations continue with best-effort package-manager support.
+- Steps that assume a specific vendor layout (Docker's signed apt repo, NodeSource repo scripts, distro-specific PHP extension names) require an explicit opt-in:
+
+  ```bash
+  sudo ALLOW_UNSUPPORTED_OS=1 vps-setup run 3,6 --yes
+  ```
+
+- If no package manager can be detected, the toolkit reports which packages must be installed manually rather than guessing.
+- UFW/nftables are used where available. On a firewall stack the toolkit does not manage (e.g. firewalld-only hosts), it warns and leaves the host firewall to you — it never disables another firewall.
+- Without systemd, the watcher falls back to a managed cron entry (one reconcile per minute). Without both systemd and cron, it installs the watcher binary and unit but warns that you must supply a supervisor.
+
+Supported architectures for Docker's signed repositories: `amd64`, `arm64`, `armhf`, `i386`, `riscv64`, `s390x`. Other architectures use best-effort distribution packages.
 
 ## Installation
 
@@ -122,7 +144,7 @@ This permits outbound SMTP 587/465/25, IMAP 993/143, Nixtec MariaDB 23306, Garag
 - **Outbound selection** adds explicit `ufw allow out` rules and permits those destination ports in the toolkit-owned `inet cloud_dev vps_docker_forward` nftables chain for detected Docker bridges.
 - **Host inbound** rules are managed separately through UFW, optionally restricted to a trusted IPv4/CIDR. Blank source means public and always requires confirmation; sensitive ports require typed authorization.
 - **The managed nftables chain** is the only chain this toolkit flushes. It inserts at most one `jump vps_docker_forward` rule (comment `VPS-MANAGED-DOCKER-JUMP`) into an existing parent chain, validates generated rules with `nft -c` before applying them, and never creates a competing table/policy if the documented `inet cloud_dev forward` chain is missing.
-- **The watcher** (`vps-firewall-watch.service`) reconciles the chain every 15 seconds using live interface/subnet discovery, so Docker bridge recreation and reboots are handled automatically.
+- **The watcher** reconciles the chain every 15 seconds using live interface/subnet discovery, so Docker bridge recreation and reboots are handled automatically. It runs as `vps-firewall-watch.service` under systemd, or as a managed cron entry on non-systemd Linux systems.
 
 See [`docs/FIREWALL.md`](docs/FIREWALL.md) for the full explanation and rollback steps.
 
@@ -130,7 +152,7 @@ See [`docs/FIREWALL.md`](docs/FIREWALL.md) for the full explanation and rollback
 
 | Menu | Component | Details |
 |---|---|---|
-| 1 | Base utilities | apt index, core tools, UFW defaults, detected SSH port preserved |
+| 1 | Base utilities | Package index for the detected manager, core tools, UFW defaults, detected SSH port preserved |
 | 2 | Node.js + PM2 | NodeSource 18/20/22 (default 22), npm, optional pnpm, global PM2 |
 | 3 | Docker Engine | Docker CE, Compose/Buildx plugins, firewall watcher |
 | 4 | Dokploy | Official installer launcher, optional Traefik 80/443 DNAT forwarding |
@@ -152,12 +174,16 @@ Outbound catalog IDs 1-20 exactly match the original guide (Web/API, DNS, NTP, S
 # Firewall and watcher
 sudo ufw status verbose
 sudo nft -a list chain inet cloud_dev vps_docker_forward
-systemctl status vps-firewall-watch.service
+systemctl status vps-firewall-watch.service          # systemd hosts
+crontab -l | grep vps-setup                           # cron fallback
 journalctl -u vps-firewall-watch.service -n 100 --no-pager
 
 # Docker bridges and default route
 ip -br -4 addr | grep -E 'docker|br-'
 ip -4 route show default
+
+# OS detection used by the toolkit
+sudo vps-setup status        # prints OS family, package manager and init system
 ```
 
 If `inet cloud_dev forward` is absent, set `NFT_TABLE`/`NFT_PARENT` in `/etc/default/vps-setup` to an existing table/chain after reviewing `nft list ruleset`. The toolkit deliberately will not create a competing firewall policy.
@@ -171,7 +197,7 @@ bash -n $(find . -name '*.sh' -type f)
 bash tests/run-tests.sh
 ```
 
-The tests use stubbed `ip`, `ufw`, `nft` and `systemctl` commands in a temporary directory. They never touch a real firewall. See [`tests/`](tests).
+The suite covers validation, firewall behaviour (stubbed `ip`/`ufw`/`nft`/`systemctl`) and OS/package-manager detection via `/etc/os-release` fixtures. They never touch a real firewall or install real packages. See [`tests/`](tests).
 
 ## Contributing
 

@@ -2,10 +2,32 @@
 
 ## Requirements
 
-- Debian 12/13 or Ubuntu 22.04/24.04 (other versions need `ALLOW_UNSUPPORTED_OS=1`)
+- **Any Linux OS.** Debian 12/13 and Ubuntu 22.04/24.04 are the primary test matrix; every other Linux distribution is handled with runtime OS detection and best-effort package-manager support.
 - Root access (`sudo`)
-- `curl`, `tar`, `sha256sum` (or `gpg` for signature verification)
+- Bash, `curl`, `tar`, `sha256sum` (or `gpg` for signature verification)
 - A provider console/rescue access path before changing firewall rules
+- Non-Linux systems are not supported: the toolkit manages Linux packages, services and firewalls and will refuse to run there.
+
+## OS and package-manager detection
+
+On every run the toolkit reads `/etc/os-release` and detects:
+
+| Detected | Values |
+|---|---|
+| OS family | `debian`, `rhel`, `suse`, `arch`, `alpine`, `unknown` |
+| Package manager | `apt`, `dnf`/`yum`/`microdnf`, `zypper`, `pacman`, `apk`, or `none` |
+| Init system | `systemd`, `openrc`, `sysv`, or `unknown` |
+| Architecture | normalized across dpkg/rpm/os-release (e.g. `x86_64` → `amd64`) |
+
+Unsupported OSes produce an advisory warning and continue with best-effort support. A few vendor-specific steps require an explicit opt-in:
+
+```bash
+sudo ALLOW_UNSUPPORTED_OS=1 vps-setup run 3,6 --yes
+```
+
+Those steps are Docker's signed apt repository and the NodeSource setup script (which assume Debian/RPM families). PHP extension package names also differ outside Debian; `pkg_install` installs what exists and warns about missing packages instead of aborting.
+
+If no package manager can be detected, the toolkit logs which packages must be installed manually. It never silently pretends an installation succeeded.
 
 ## Install from the repository
 
@@ -37,6 +59,7 @@ Environment variables:
 | `VPS_SETUP_GPG_KEY_URL` | Signing key URL | unset |
 | `VPS_SETUP_HOME` | Install directory override | `/usr/local/lib/vps-setup-toolkit` |
 | `VPS_SETUP_INSTALL_ONLY=1` | Install without launching menu | unset |
+| `ALLOW_UNSUPPORTED_OS=1` | Permit vendor-specific steps on non-primary OS families | unset |
 
 ## Install from a local clone
 

@@ -1,0 +1,6 @@
+# The toolkit is a modular Bash library: shared state variables are assigned in
+# common.sh and consumed by other sourced modules, so per-file analysis marks
+# them as unused (SC2034). Module sourcing uses computed paths by design
+# (SC1091) and is verified by the runtime test suites.
+disable=SC2034
+disable=SC1091

@@ -57,8 +57,9 @@ init_runtime(){
 }
 
 _log_line(){
-  local level="$1"; shift
-  local line="[$(date '+%F %T')] [${level}] $*"
+  local level="$1" line
+  shift
+  line="[$(date '+%F %T')] [${level}] $*"
   if [[ "$level" == "INFO" ]]; then
     printf '%s\n' "$line"
   else

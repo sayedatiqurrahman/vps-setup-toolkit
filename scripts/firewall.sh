@@ -499,7 +499,12 @@ custom_host_inbound(){
           warn "Blank source permits public access from any IPv4 address."
           if sensitive_inbound_port "$port"; then
             warn "This is a database/cache/administration port and is blocked by default."
-            confirm_typed "I-UNDERSTAND-PUBLIC-${port}" && allow=1 || { log "Cancelled."; continue; }
+            if confirm_typed "I-UNDERSTAND-PUBLIC-${port}"; then
+              allow=1
+            else
+              log "Cancelled."
+              continue
+            fi
           else
             confirm "Confirm public inbound access?" || { log "Cancelled."; continue; }
           fi

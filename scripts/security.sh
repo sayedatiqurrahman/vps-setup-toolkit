@@ -123,20 +123,22 @@ ssh_harden_optional(){
 }
 
 fail2ban_install(){
-  local jail_tmp jail_file="/etc/fail2ban/jail.d/vps-setup.conf"
+  local jail_tmp jail_file="/etc/fail2ban/jail.d/vps-setup.conf" backend logpath=""
   require_supported_os || return 1
   pkg_install fail2ban || return 1
   jail_tmp="$(mktemp)" || return 1
-  cat >"$jail_tmp" <<'JAIL'
-# Managed by VPS Setup Toolkit. Existing jail files are not modified.
-[sshd]
-enabled = true
-port = ssh
-backend = systemd
-maxretry = 5
-bantime = 1h
-findtime = 10m
-JAIL
+  if [[ "$INIT_SYSTEM" == "systemd" ]]; then
+    backend="systemd"
+  else
+    backend="auto"
+    logpath="logpath = %(sshd_log)s"
+  fi
+  {
+    printf '%s\n' '# Managed by VPS Setup Toolkit. Existing jail files are not modified.'
+    printf '%s\n' '[sshd]' 'enabled = true' 'port = ssh' "backend = ${backend}"
+    if [[ -n "$logpath" ]]; then printf '%s\n' "$logpath"; fi
+    printf '%s\n' 'maxretry = 5' 'bantime = 1h' 'findtime = 10m'
+  } >"$jail_tmp"
   if ! install_file "$jail_tmp" "$jail_file" 0644; then rm -f "$jail_tmp"; return 1; fi
   rm -f "$jail_tmp"
   service_enable fail2ban || warn "Could not enable fail2ban automatically; start it manually."

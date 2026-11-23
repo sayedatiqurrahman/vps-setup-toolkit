@@ -74,7 +74,7 @@ uninstall_toolkit(){
   fi
   remove_cron_watcher
   rm -f -- "$WATCHER_PATH" "$UNIT_PATH" "$WRAPPER_PATH"
-  is_systemd && systemctl daemon-reload >/dev/null 2>&1 || true
+  if is_systemd; then systemctl daemon-reload >/dev/null 2>&1 || true; fi
 
   if (( remove_nft == 1 )); then remove_managed_nft; fi
   if (( remove_ufw == 1 )); then remove_managed_ufw_egress; fi

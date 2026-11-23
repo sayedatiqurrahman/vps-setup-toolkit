@@ -64,7 +64,7 @@ The toolkit never runs `nft flush ruleset` and never deletes user chains or rule
 
 ## Docker recovery
 
-`vps-firewall-watch.service` runs `/usr/local/sbin/vps-firewall-watch`, which invokes `firewall.sh nft-reconcile` every `WATCH_INTERVAL` seconds (default 15). Because bridge/subnet discovery happens on every pass, the managed chain heals after:
+On systemd hosts, `vps-firewall-watch.service` runs `/usr/local/sbin/vps-firewall-watch`, which invokes `firewall.sh nft-reconcile` every `WATCH_INTERVAL` seconds (default 15). On non-systemd Linux hosts the toolkit installs a managed cron entry instead, calling `firewall.sh nft-reconcile` once per minute. If neither systemd nor cron exists, the watcher binary and unit are installed but a warning tells you to supply a supervisor. Because bridge/subnet discovery happens on every pass, the managed chain heals after:
 
 - Docker daemon restart
 - bridge/network recreation (`br-*` name or subnet changes)
@@ -74,7 +74,9 @@ The toolkit never runs `nft flush ruleset` and never deletes user chains or rule
 
 If the generated ruleset is unchanged and the chain/jump exist, no write occurs (idempotent and quiet).
 
-The unit uses `Restart=always`, `NoNewPrivileges=true`, `PrivateTmp=true` and read/write paths limited to state/log directories.
+The unit uses `Restart=always`, `NoNewPrivileges=true`, `PrivateTmp=true` and read/write paths limited to state/log directories. The cron fallback is marked with `# vps-setup firewall watch (managed)` so uninstall can remove only that line.
+
+UFW is the host-firewall backend the toolkit manages. If UFW is unavailable on a given distribution, base setup warns and skips host-firewall configuration; the toolkit never disables or replaces another firewall (for example firewalld) on its own.
 
 ## Dokploy ingress (optional)
 
@@ -87,7 +89,8 @@ ufw status verbose
 nft -a list chain inet cloud_dev vps_docker_forward
 ip -br -4 addr | grep -E 'docker|br-'
 ip -4 route show default
-systemctl status vps-firewall-watch.service
+systemctl status vps-firewall-watch.service    # systemd hosts
+crontab -l | grep vps-setup                     # cron fallback
 journalctl -u vps-firewall-watch.service -n 100 --no-pager
 ```
 
@@ -96,7 +99,8 @@ journalctl -u vps-firewall-watch.service -n 100 --no-pager
 Stop the watcher:
 
 ```bash
-sudo systemctl disable --now vps-firewall-watch.service
+sudo systemctl disable --now vps-firewall-watch.service   # systemd hosts
+# or, on the cron fallback: remove the line containing "vps-setup" from `crontab -e`
 ```
 
 Remove only toolkit-owned firewall objects after inspection:

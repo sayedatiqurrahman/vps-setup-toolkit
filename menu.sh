@@ -8,7 +8,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/scripts/common.sh
 
 # All module names are a fixed internal list; no user input is involved.
 for _module in system firewall docker nodejs pm2 php nginx wordpress dokploy coolify security recovery status uninstall; do
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090
   source "${SCRIPT_DIR}/scripts/${_module}.sh"
 done
 unset _module

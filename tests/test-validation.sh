@@ -11,7 +11,8 @@ export VPS_SETUP_STATE_DIR="${TEST_TMP}/etc/vps-setup"
 export VPS_SETUP_LOG_DIR="${TEST_TMP}/var/log/vps-setup"
 export VPS_SETUP_LOG_FILE="${VPS_SETUP_LOG_DIR}/setup.log"
 export VPS_SETUP_BACKUP_DIR="${TEST_TMP}/var/backups/vps-setup"
-export VPS_SETUP_SOURCE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+VPS_SETUP_SOURCE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+export VPS_SETUP_SOURCE_ROOT
 
 ROOT_DIR="$VPS_SETUP_SOURCE_ROOT"
 # shellcheck source=../scripts/common.sh

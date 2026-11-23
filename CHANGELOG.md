@@ -12,10 +12,11 @@ All notable changes to the VPS Setup Toolkit are documented here.
 - Outbound service catalog (`config/services.conf`) with the 20 categories from the original guide, custom TCP/UDP ports, duplicate prevention, and add/remove selection handling.
 - UFW management with idempotent managed egress rules, default SSH/HTTP/HTTPS inbound policy, restricted or explicitly confirmed public host inbound ports, and tracking/removal of toolkit-managed rules.
 - Dedicated nftables chain (`vps_docker_forward` by default) with dynamic Docker bridge/subnet detection, a single guarded jump from an existing forward chain, atomic validation with `nft -c`, and no full-ruleset flush.
-- Persistent systemd watcher that reconciles managed nftables rules after reboot, bridge recreation, or subnet changes.
+- Persistent watcher that reconciles managed nftables rules after reboot, bridge recreation, or subnet changes: a systemd unit on systemd hosts and a managed cron entry as a portable fallback.
 - Installation modules for base utilities, Node.js (18/20/22), npm/pnpm, PM2, Docker Engine/Compose, Dokploy, Coolify, Nginx, PHP-FPM, WordPress prerequisites, Fail2ban, and SSH audit/hardening suggestions.
 - Repair/recovery, system status, and uninstall modules with explicit confirmations and no automatic removal of unrelated firewall rules.
-- Documentation (`README.md`, `docs/*.md`) and non-destructive stubbed test suites for validation, service selection, UFW/nftables rule generation, bridge detection, and idempotency.
+- Cross-OS support: runtime detection of OS family, package manager (apt/dnf/yum/apk/pacman/zypper) and init system (systemd/openrc/sysv), best-effort support for any Linux distribution, `ALLOW_UNSUPPORTED_OS=1` for vendor-specific steps, and a clear refusal on non-Linux hosts.
+- Documentation (`README.md`, `docs/*.md`) and non-destructive stubbed test suites for validation, service selection, UFW/nftables rule generation, bridge detection, OS detection, and idempotency.
 
 ### Safety notes
 

@@ -2,20 +2,22 @@
 
 Every module checks prerequisites, avoids replacing existing installations, and is safe to re-run.
 
+All modules use the OS detection performed in `scripts/common.sh`: they choose packages and service commands for the detected family (`debian`, `rhel`, `suse`, `arch`, `alpine`) and init system (`systemd`, `openrc`, `sysv`). Unsupported Linux OSes warn and continue with best-effort package-manager support; vendor-specific steps need `ALLOW_UNSUPPORTED_OS=1`.
+
 ## Base VPS Setup (menu 1)
 
-Installs `ca-certificates`, `curl`, `wget`, `gnupg`, `lsb-release`, `jq`, `git`, `ufw`, `nftables`, `iproute2`, `procps` and `systemd`. Applies the documented UFW baseline: default deny inbound, default allow outbound, TCP 22/80/443 plus any alternate SSH port detected via `sshd -T`.
+Installs a family-appropriate set of core tools. On apt systems: `ca-certificates`, `curl`, `wget`, `gnupg`, `lsb-release`, `jq`, `git`, `ufw`, `nftables`, `iproute2`, `procps`, `systemd`. RPM systems use `gnupg2`, `firewalld`, `iproute` and `procps-ng`; other families get their native equivalents. Applies the documented UFW baseline where UFW exists: default deny inbound, default allow outbound, TCP 22/80/443 plus any alternate SSH port detected via `sshd -T`. If UFW is unavailable, base setup warns and leaves host-firewall configuration to you rather than disabling another firewall.
 
 ## Node.js, npm, pnpm and PM2 (menu 2)
 
-- Node.js from NodeSource: 18.x, 20.x or 22.x (default 22, matching the guide).
+- Node.js from NodeSource: 18.x, 20.x or 22.x (default 22, matching the guide). The NodeSource setup script is attempted on Debian/RPM families; elsewhere set `ALLOW_UNSUPPORTED_OS=1` to try it or install Node from your distribution packages.
 - npm is installed with Node.js; pnpm can be installed globally on request.
 - PM2 is installed globally. The module prints the `pm2 startup` suggestion rather than modifying boot services automatically.
 - Existing Node/npm versions are left alone.
 
 ## Docker Engine (menu 3)
 
-Adds Docker's signed apt repository for Debian or Ubuntu using the detected codename and architecture, installs `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`, enables the daemon, and installs the firewall watcher. Docker's unauthenticated TCP API is never enabled.
+Adds Docker's signed apt repository for Debian/Ubuntu-family systems using the detected codename and architecture, installs `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`, and enables the daemon. On other families, distribution Docker packages are used only when `ALLOW_UNSUPPORTED_OS=1` is set. The firewall watcher is installed in all cases (systemd unit or cron fallback). Docker's unauthenticated TCP API is never enabled.
 
 ## Dokploy (menu 4) and Coolify (menu 5)
 
@@ -32,14 +34,14 @@ Dokploy additionally offers to enable HTTP/HTTPS forwarding to Traefik at `TRAEF
 ## PHP, Nginx and WordPress prerequisites (menus 6 and 7)
 
 - Nginx from distribution packages; existing site configs are not modified. `nginx -t` is checked.
-- PHP-FPM and CLI plus `mysql`, `curl`, `gd`, `mbstring`, `xml`, `zip`, `intl`, `bcmath` modules. On systems with multiple PHP versions you can choose X.Y; otherwise the distribution default is used.
+- PHP-FPM and CLI plus `mysql`, `curl`, `gd`, `mbstring`, `xml`, `zip`, `intl`, `bcmath` extensions (Debian naming). On other families the equivalent distribution package names are attempted, and unavailable ones are reported rather than silently skipped. On apt systems with multiple PHP versions you can choose X.Y; otherwise the distribution default is used.
 - WordPress prerequisites verify the same extensions and print manual next steps. WordPress itself is not downloaded or configured.
 
 ## SSH security (menu 8)
 
 - Read-only checklist and audit based on the original guide.
 - Optional hardening of `PermitRootLogin` and `PasswordAuthentication` only: changes are made on a copy, validated with `sshd -t -f`, backed up, and reloaded. No automatic SSH port change. Password authentication cannot be disabled unless an `authorized_keys` file exists.
-- Fail2ban installation with a managed `jail.d/vps-setup.conf` SSH jail using the systemd backend.
+- Fail2ban installation with a managed `jail.d/vps-setup.conf` SSH jail: the `systemd` backend is used on systemd hosts and fail2ban's portable `auto` backend with `%(sshd_log)s` elsewhere.
 
 ## Firewall service manager (menu 9)
 

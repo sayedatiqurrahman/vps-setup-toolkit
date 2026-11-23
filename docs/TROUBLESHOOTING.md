@@ -11,6 +11,20 @@ sudo vps-setup run 11 --yes          # repair pass
 sudo /usr/local/lib/vps-setup-toolkit/scripts/firewall.sh nft-reconcile
 ```
 
+## OS detection and unsupported systems
+
+```bash
+sudo vps-setup status
+cat /etc/os-release
+```
+
+The status report prints the detected OS family, package manager, init system and architecture.
+
+- **"No supported package manager detected"**: install the packages listed in `docs/SERVICES.md` manually, or add your distribution's package manager support in `scripts/common.sh`. The toolkit will not guess.
+- **"using best-effort ... support"**: the OS is outside the primary Debian/Ubuntu matrix. Normal operations still run; vendor-specific steps (Docker's apt repo, NodeSource) require `sudo ALLOW_UNSUPPORTED_OS=1 vps-setup ...`.
+- **"detected '<non-Linux>'"**: the toolkit refuses to run on non-Linux systems because it manages Linux packages, services and firewalls.
+- **"UFW is not available"**: base setup skipped host-firewall configuration. Configure your distribution firewall yourself; the toolkit never disables another firewall.
+
 ## UFW
 
 ```bash
@@ -58,13 +72,24 @@ The watcher discovers `docker0`, `docker_gwbridge` and `br-<hex>` automatically.
 
 ## Watcher
 
+On systemd hosts:
+
 ```bash
 systemctl status vps-firewall-watch.service
 journalctl -u vps-firewall-watch.service -n 100 --no-pager
 sudo systemctl restart vps-firewall-watch.service
 ```
 
-If the unit is missing, run menu item **11) Repair and Recovery** or `sudo /usr/local/lib/vps-setup-toolkit/scripts/firewall.sh watcher`.
+On non-systemd hosts the toolkit installs a cron fallback instead:
+
+```bash
+crontab -l | grep vps-setup
+tail -n 50 /var/log/vps-setup/firewall-watch.log
+```
+
+If neither supervisor is present, the watcher binary and unit are installed but nothing runs them; configure a supervisor or run `firewall.sh nft-reconcile` manually after Docker network changes.
+
+If the unit/cron entry is missing, run menu item **11) Repair and Recovery** or `sudo /usr/local/lib/vps-setup-toolkit/scripts/firewall.sh watcher`.
 
 ## SSH safety
 
