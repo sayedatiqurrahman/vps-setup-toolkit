@@ -8,7 +8,7 @@
 COMMON_LOADED=1
 
 APP_NAME="vps-setup"
-APP_VERSION="1.1.1"
+APP_VERSION="1.1.2"
 TOOLKIT_NAME="VPS Setup Toolkit"
 
 # Persistent state. /etc/default/vps-setup is kept for compatibility with the
@@ -75,6 +75,22 @@ warn(){ _log_line WARN "$@"; }
 error(){ _log_line ERROR "$@"; }
 success(){ _log_line OK "$@"; }
 section(){ printf '\n===== %s =====\n' "$*"; }
+
+# Printed when the interactive toolkit starts, including the first launch
+# right after installation. Kept here so every entry point can reuse it.
+print_banner(){
+  cat <<'BANNER'
+╔═════════════════════════════════════════════════════════════════════════╗
+║  __     ______  ____    ____  _____ _   _ _____ ___ _   _ _____ _       ║
+║  \ \   / /  _ \/ ___|  / ___|| ____| \ | |_   _|_ _| \ | | ____| |      ║
+║   \ \ / /| |_) \___ \  \___ \|  _| |  \| | | |  | ||  \| |  _| | |      ║
+║    \ V / |  __/ ___) |  ___) | |___| |\  | | |  | || |\  | |___| |___   ║
+║     \_/  |_|   |____/  |____/|_____|_| \_| |_| |___|_| \_|_____|_____|  ║
+╚═════════════════════════════════════════════════════════════════════════╝
+        VPS SENTINEL  |  Powered by Programming Light
+        Developed by Sayed Atiqur Rahman
+BANNER
+}
 
 die(){ error "$@"; exit 1; }
 

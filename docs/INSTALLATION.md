@@ -5,10 +5,10 @@
 On a fresh Linux VPS, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.1/install.sh -o install.sh && sudo bash install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.2/install.sh -o install.sh && sudo bash install.sh
 ```
 
-The command is pinned to release `v1.1.1`. The installer verifies the downloaded archive's SHA-256 against the checksum published in the `checksums` branch before installing anything, so no manual hash setup is needed for production use. A mismatch aborts the install.
+The command is pinned to release `v1.1.2`. The installer verifies the downloaded archive's SHA-256 against the checksum published in the `checksums` branch before installing anything, so no manual hash setup is needed for production use. A mismatch aborts the install.
 
 The installer copies the toolkit to `/usr/local/lib/vps-setup-toolkit`, creates `/usr/local/sbin/vps-setup`, and opens the interactive menu. No cloning is needed.
 
@@ -40,7 +40,12 @@ sudo vps-setup              # choose 13) Uninstall Toolkit
 sudo /usr/local/lib/vps-setup-toolkit/scripts/uninstall.sh
 ```
 
-The typed confirmation `UNINSTALL` is required. Removal of the managed nftables chain, UFW egress rules, config, state and logs is opt-in and handled separately. Unrelated firewall rules and installed packages are never removed automatically.
+The uninstaller offers two options:
+
+1. **Delete only the toolkit** — removes the installed files, watcher, systemd unit and launcher, but keeps `/etc/default/vps-setup`, state, logs and all existing firewall rules. Choose this when you plan to reinstall or restore the toolkit later. Existing rules are no longer reconciled by the watcher until the toolkit is reinstalled.
+2. **Delete the toolkit with all configuration** — additionally removes the managed nftables chain/jump, toolkit-managed UFW outbound rules, config, state and logs.
+
+Both options require the typed confirmation `UNINSTALL`. Non-interactive equivalents: `vps-setup uninstall keep-config` and `vps-setup uninstall all` (direct script: `sudo /usr/local/lib/vps-setup-toolkit/scripts/uninstall.sh keep-config|all`). Unrelated firewall rules and installed packages are never removed automatically.
 
 ---
 
@@ -62,7 +67,7 @@ The quick install above is the recommended path for almost everyone. The notes b
 <summary>Show SHA-256 / GPG verification steps</summary>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.1/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.2/install.sh -o install.sh
 chmod 700 install.sh
 less install.sh                       # review before running
 sudo bash install.sh                  # pinned release: checksum verified automatically
@@ -114,7 +119,7 @@ sudo bash install.sh --source-dir "$PWD"
 | Variable | Purpose | Default |
 |---|---|---|
 | `VPS_SETUP_REPO_URL` | GitHub repo used to build the codeload URL | `https://github.com/sayedatiqurrahman/vps-setup-toolkit` |
-| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.1.1` (pinned release) |
+| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.1.2` (pinned release) |
 | `VPS_SETUP_ARCHIVE_URL` | Explicit archive URL (any host) | derived from repo URL |
 | `VPS_SETUP_ARCHIVE_SHA256` | Expected archive SHA-256 | published checksum for pinned release |
 | `VPS_SETUP_SIGNATURE_URL` | Detached GPG signature URL | unset |

@@ -2,6 +2,14 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.1.2] - 2026-11-23
+
+### Added
+
+- Two explicit uninstall modes: **toolkit only** (keeps configuration, state, logs and firewall rules) and **toolkit with all configuration** (also removes managed firewall rules, config, state and logs). Available in menu 13, via `vps-setup uninstall keep-config|all`, and in the standalone uninstaller.
+- The VPS SENTINEL ASCII banner now appears first whenever the toolkit starts, including the first launch from the installer.
+- Uninstall mode tests (`tests/test-uninstall.sh`) with stubbed firewall commands.
+
 ## [1.1.1] - 2026-11-23
 
 ### Added

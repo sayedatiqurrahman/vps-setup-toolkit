@@ -165,6 +165,7 @@ Usage:
   vps-setup run 2,3,9 --yes    Run selected categories without prompts
   vps-setup status             Read-only system/firewall status
   vps-setup firewall STATUS    Firewall subcommand (select|apply|status|...)
+  vps-setup uninstall MODE     Uninstall (keep-config|all; no arg = prompt)
   vps-setup --version          Print version
   vps-setup --help             Show this help
 
@@ -173,6 +174,13 @@ Service runs configure UFW/nftables first and apply the standard outbound
 service preset afterwards. Set VPS_SETUP_SKIP_FIREWALL=1 to opt out.
 USAGE
 }
+
+# Show the brand banner first for every normal invocation. Keep --version
+# clean so scripts can parse it.
+case "${1:-menu}" in
+  --version|-V|version) printf '%s\n' "$APP_VERSION"; exit 0 ;;
+esac
+print_banner
 
 case "${1:-menu}" in
   --help|-h|help) usage; exit 0 ;;
@@ -213,6 +221,12 @@ case "${1:-menu}" in
     init_runtime
     shift
     firewall_cli "$@"
+    ;;
+  uninstall)
+    need_root
+    init_runtime
+    shift
+    uninstall_cli "$@"
     ;;
   *)
     usage >&2

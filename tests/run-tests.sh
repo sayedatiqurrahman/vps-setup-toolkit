@@ -42,6 +42,9 @@ bash tests/test-os-detect.sh || fail=1
 printf '\n== Firewall tests (stubbed commands) ==\n'
 bash tests/test-firewall.sh || fail=1
 
+printf '\n== Uninstall tests (stubbed commands) ==\n'
+bash tests/test-uninstall.sh || fail=1
+
 if (( fail == 0 )); then
   printf '\nAll checks passed.\n'
 else

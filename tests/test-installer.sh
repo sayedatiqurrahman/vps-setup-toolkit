@@ -115,7 +115,20 @@ menu_rc=$?
 set -e
 check "installed menu starts" "0" "$menu_rc"
 assert_true "installed menu shows usage" grep -q "Usage:" "$TEST_TMP/menu.stdout.log"
+assert_true "banner shown before help" grep -q "VPS SENTINEL" "$TEST_TMP/menu.stdout.log"
 assert_false "installed menu has no source errors" grep -q "No such file or directory" "$TEST_TMP/menu.stderr.log"
+
+# Simulate the first interactive launch (the installer execs the menu with no
+# args) and confirm the banner appears before the menu.
+awk '{ line=$0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", line); if (line == "need_root") print ": # root check stubbed for tests"; else print }' \
+  "$GOOD_HOME/menu.sh" >"$GOOD_HOME/menu-interactive.sh"
+set +e
+printf '0\n' | bash "$GOOD_HOME/menu-interactive.sh" >"$TEST_TMP/menu-interactive.log" 2>&1
+interactive_rc=$?
+set -e
+check "interactive menu exits cleanly" "0" "$interactive_rc"
+assert_true "banner shown on first menu launch" grep -q "VPS SENTINEL" "$TEST_TMP/menu-interactive.log"
+assert_true "menu shown after banner" grep -q "VPS SETUP MENU" "$TEST_TMP/menu-interactive.log"
 
 # --- checksum mismatch is rejected -----------------------------------------
 MISMATCH_HOME="$TEST_TMP/install-mismatch"
