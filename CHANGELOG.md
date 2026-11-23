@@ -2,6 +2,12 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.1.3] - 2026-11-23
+
+### Changed
+
+- Credits now list **Nixtec Systems** as a collaborating company alongside Programming Light in the README and the toolkit's startup banner.
+
 ## [1.1.2] - 2026-11-23
 
 ### Added
