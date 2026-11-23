@@ -30,6 +30,9 @@ else
   printf '  shellcheck not installed; skipped.\n'
 fi
 
+printf '\n== Installer bootstrap tests ==\n'
+bash tests/test-installer.sh || fail=1
+
 printf '\n== Validation tests ==\n'
 bash tests/test-validation.sh || fail=1
 

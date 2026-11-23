@@ -13,6 +13,12 @@ All notable changes to the VPS Setup Toolkit are documented here.
 - `CONTRIBUTING.md` with open-source contribution opportunities, development workflow and safety guidelines.
 - Branded classic figlet-style ASCII banner for **VPS Sentinel** (powered by Programming Light, developed by Sayed Atiqur Rahman) and a clickable table of contents in the README.
 - README restructured around the single-command installation; advanced alternatives and supported systems moved to the appendix.
+- Installer bootstrap regression tests (`tests/test-installer.sh`) covering the remote archive install path and incomplete-archive rejection.
+
+### Fixed
+
+- Remote installation no longer reports success without copying any files: status output from `bootstrap_download` is no longer captured into `SOURCE_ROOT`, and the installer now fails loudly when required files (`menu.sh`, `install.sh`, `scripts/common.sh`, `config/services.conf`) are missing from the install directory.
+- Toolkit version strings aligned with the changelog (`1.1.0`).
 
 ### Removed
 

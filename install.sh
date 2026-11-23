@@ -17,7 +17,7 @@
 set -Eeuo pipefail
 
 APP_NAME="vps-setup"
-APP_VERSION="1.0.0"
+APP_VERSION="1.1.0"
 DEFAULT_REPO="https://github.com/sayedatiqurrahman/vps-setup-toolkit"
 INSTALL_DIR="${VPS_SETUP_HOME:-/usr/local/lib/vps-setup-toolkit}"
 WRAPPER_PATH="${VPS_SETUP_WRAPPER:-/usr/local/sbin/vps-setup}"
@@ -89,6 +89,8 @@ find_source_root(){
   return 1
 }
 
+BOOTSTRAP_SOURCE_ROOT=""
+
 bootstrap_download(){
   local repo archive tmp owner repo_name found
   command_exists curl || die "curl is required to bootstrap the toolkit."
@@ -106,7 +108,9 @@ bootstrap_download(){
   fi
 
   tmp="$(mktemp -d)" || die "Cannot create a temporary directory."
-  log "Downloading toolkit archive from ${archive}"
+  # This function is called from a command substitution; keep status output on
+  # stderr so only the resolved source path is captured by the caller.
+  log "Downloading toolkit archive from ${archive}" >&2
   curl -fsSL "$archive" -o "${tmp}/archive.tar.gz" || die "Archive download failed."
 
   if [[ -n "${VPS_SETUP_ARCHIVE_SHA256:-}" ]]; then
@@ -134,7 +138,8 @@ bootstrap_download(){
   tar -xzf "${tmp}/archive.tar.gz" -C "$tmp" || die "Archive extraction failed."
   found="$(find "$tmp" -type f -path '*/scripts/common.sh' -print -quit)"
   [[ -n "$found" ]] || die "Downloaded archive does not contain scripts/common.sh."
-  find_source_root "$(dirname "$(dirname "$found")")" || die "Downloaded archive has an unexpected layout."
+  BOOTSTRAP_SOURCE_ROOT="$(find_source_root "$(dirname "$(dirname "$found")")")" \
+    || die "Downloaded archive has an unexpected layout."
 }
 
 SOURCE_ROOT=""
@@ -145,7 +150,8 @@ elif SOURCE_ROOT="$(find_source_root "$SCRIPT_DIR")"; then
 elif SOURCE_ROOT="$(find_source_root "$PWD")"; then
   :
 else
-  SOURCE_ROOT="$(bootstrap_download)"
+  bootstrap_download
+  SOURCE_ROOT="$BOOTSTRAP_SOURCE_ROOT"
 fi
 
 need_root
@@ -156,6 +162,12 @@ for item in README.md LICENSE CHANGELOG.md install.sh menu.sh config scripts sys
   if [[ -e "${SOURCE_ROOT}/${item}" ]]; then
     cp -a -- "${SOURCE_ROOT}/${item}" "${INSTALL_DIR}/" || die "Failed to copy ${item}."
   fi
+done
+
+# Never report success unless the files the wrapper actually executes exist.
+for required in menu.sh install.sh scripts/common.sh config/services.conf; do
+  [[ -f "${INSTALL_DIR}/${required}" ]] \
+    || die "Installation is incomplete: ${required} is missing from ${INSTALL_DIR}. Source was ${SOURCE_ROOT}."
 done
 chmod 0755 "${INSTALL_DIR}/menu.sh" "${INSTALL_DIR}/install.sh" 2>/dev/null || true
 chmod 0755 "${INSTALL_DIR}"/scripts/*.sh 2>/dev/null || true

@@ -8,7 +8,7 @@
 COMMON_LOADED=1
 
 APP_NAME="vps-setup"
-APP_VERSION="1.0.0"
+APP_VERSION="1.1.0"
 TOOLKIT_NAME="VPS Setup Toolkit"
 
 # Persistent state. /etc/default/vps-setup is kept for compatibility with the
