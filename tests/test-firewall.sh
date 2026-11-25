@@ -280,11 +280,13 @@ start_watcher
 watcher_ok=0
 if [[ -x "$VPS_SETUP_WATCHER" ]]; then watcher_ok=1; fi
 check "watcher installed" "1" "$watcher_ok"
-check_true "watcher calls reconcile" grep -q 'nft-reconcile' "$VPS_SETUP_WATCHER"
+check_true "watcher calls nft reconcile" grep -q 'nft-reconcile' "$VPS_SETUP_WATCHER"
+check_true "watcher calls network reconcile" grep -q '"\$NETWORK" reconcile' "$VPS_SETUP_WATCHER"
+unit_src="$(toolkit_file systemd/vps-firewall-watch.service)"
+check_true "unit allows backup writes" grep -q '/var/backups/vps-setup' "$unit_src"
 unit_ok=0
 if [[ -f "$VPS_SETUP_UNIT" ]]; then unit_ok=1; fi
 check "systemd unit installed" "1" "$unit_ok"
-unit_src="$(toolkit_file systemd/vps-firewall-watch.service)"
 check_true "systemd unit has ExecStart" grep -q 'ExecStart=/usr/local/sbin/vps-firewall-watch' "$unit_src"
 
 # --- automatic docker_gwbridge / Traefik ingress rules -----------------------
@@ -310,6 +312,8 @@ check "standard preset applied" "$STANDARD_SERVICE_IDS" "$SELECTED_SERVICE_IDS"
 firewall_preflight 0 3 >/dev/null 2>&1 || true
 load_config
 check "docker selection enables ingress" "1" "$ENABLE_DOKPLOY_INGRESS"
+check "docker selection enables MSS repair" "1" "$ENABLE_MSS_CLAMP"
+check_true "config stores network doctor keys" grep -q '^NETWORK_TARGET_PORT=""' "$CONF_FILE"
 
 printf '\nFirewall tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 )) || exit 1

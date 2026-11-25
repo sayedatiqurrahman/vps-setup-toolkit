@@ -49,13 +49,14 @@ check "normalize_ports dedupe/sort/zeroes" "53 80 443" "$(normalize_ports '443 8
 check "normalize_ports empty" "" "$(normalize_ports '')"
 
 # --- menu selection ---------------------------------------------------------
-parse_menu_selection "2, 3,4,3" 13
+parse_menu_selection "2, 3,4,3" 14
 check "parse_menu_selection dedupe" "2 3 4" "${MENU_IDS[*]}"
-assert_false parse_menu_selection "2,x" 13
-assert_false parse_menu_selection "14" 13
-assert_false parse_menu_selection "0" 13
-assert_false parse_menu_selection "" 13
-assert_true parse_menu_selection "1,2,3,4,5,6,7,8,9,10,11,12,13" 13
+assert_false parse_menu_selection "2,x" 14
+assert_true parse_menu_selection "14" 14
+assert_false parse_menu_selection "15" 14
+assert_false parse_menu_selection "0" 14
+assert_false parse_menu_selection "" 14
+assert_true parse_menu_selection "1,2,3,4,5,6,7,8,9,10,11,12,13,14" 14
 
 # --- id list helpers --------------------------------------------------------
 check "toggle_id_list add+remove" "1 5 7" "$(toggle_id_list '1 3 5' '3 7')"
@@ -96,6 +97,16 @@ save_config
 assert_true load_config
 check "config round trip TCP" "80 443 587 9001" "$TCP_EGRESS_PORTS"
 check "config round trip custom" "9001" "$CUSTOM_TCP_PORTS"
+ENABLE_MSS_CLAMP=1
+NETWORK_TARGET_HOST="sms.example.test"
+NETWORK_TARGET_PORT="8443"
+NETWORK_PROTOCOL="https"
+save_config
+load_config
+check "MSS clamp config persisted" "1" "$ENABLE_MSS_CLAMP"
+check "network target host persisted" "sms.example.test" "$NETWORK_TARGET_HOST"
+check "network target port persisted" "8443" "$NETWORK_TARGET_PORT"
+check "network protocol persisted" "https" "$NETWORK_PROTOCOL"
 
 printf '\nValidation tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 )) || exit 1

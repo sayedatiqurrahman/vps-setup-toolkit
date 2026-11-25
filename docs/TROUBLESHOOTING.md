@@ -7,8 +7,10 @@ Always keep a provider console or rescue session available before modifying fire
 ```bash
 sudo vps-setup status
 sudo vps-setup firewall status
-sudo vps-setup run 11 --yes          # repair pass
+sudo vps-setup run 11 --yes                 # general repair pass
 sudo /usr/local/lib/vps-setup-toolkit/scripts/firewall.sh nft-reconcile
+sudo /usr/local/lib/vps-setup-toolkit/scripts/network.sh reconcile
+sudo vps-setup network status               # container network doctor
 ```
 
 ## OS detection and unsupported systems
@@ -69,6 +71,49 @@ ip -4 route show default
 ```
 
 The watcher discovers `docker0`, `docker_gwbridge` and `br-<hex>` automatically. After creating a new Docker network, allow up to `WATCH_INTERVAL` seconds (default 15) for rules to appear. If egress still fails, check Docker's own NAT/masquerade rules, DNS inside the container, and any provider-side firewall.
+
+## Container works on host but not inside Docker
+
+Use menu **14) Container Network Doctor** or the CLI. Diagnosis is read-only; no repair is applied unless you explicitly approve it.
+
+```bash
+sudo vps-setup network status
+sudo vps-setup network containers
+sudo vps-setup network diagnose --container <id-or-name> --target api.example.test:443 --protocol https
+sudo vps-setup network test --container <id-or-name> --target api.example.test:443
+sudo vps-setup network repair --container <id-or-name> --target api.example.test:443 --dry-run
+sudo vps-setup network repair --container <id-or-name> --target api.example.test:443 --apply
+sudo vps-setup network verify --container <id-or-name> --target api.example.test:443 --fresh-connections 5
+sudo vps-setup network rollback [change-id]
+sudo vps-setup network watch 1
+```
+
+The doctor runs the same DNS/TCP/TLS/application probe from the host and from the selected container, then reports a root cause:
+
+| Root cause | Meaning | Automatic repair? |
+|---|---|---|
+| `NONE` | No container-specific failure | No change |
+| `DNS` | Host resolves, container does not | No; check Docker DNS/upstream resolvers |
+| `ROUTING_OR_FIREWALL` | DNS works, container TCP fails | No; inspect DOCKER-USER, nftables forward chains, MASQUERADE |
+| `MTU_MSS` | TCP works, TLS/HTTPS stalls, MTU evidence supports it | **Yes**, scoped MSS clamp with approval |
+| `TLS_OR_PROXY` | TCP works, TLS fails without MTU evidence | No; check CA/time/SNI/proxy, never disable verification |
+| `APPLICATION_AUTH` / `APPLICATION_PROTOCOL` | TCP/TLS works, application rejects the request | No; not a firewall issue |
+| `DESTINATION_OR_HOST` | The VPS itself fails the test | No; fix host connectivity first |
+
+Target selection is dynamic: `NETWORK_TARGET_PORT` in `/etc/default/vps-setup` wins; otherwise one allowed outbound TCP port is auto-selected, interactive mode offers a choice when several are allowed, and non-interactive runs use the first allowed port deterministically. `NETWORK_TARGET_HOST` supplies the hostname when `--target` is omitted. Use `--protocol http|https|smtp|smtps|imap|imaps|mqtt|mqtts|dns|...` for non-web services; STARTTLS/plain profiles are verified at TCP level instead of being reported as false TLS failures.
+
+When `MTU_MSS` is diagnosed, `--dry-run` prints the exact plan. `--apply` requires typing `APPLY-NETWORK-REPAIR`, backs up the mangle table, creates only `VPS-SENTINEL-MSS` with one bridge→WAN clamp rule per discovered Docker bridge and one commented `FORWARD` jump, then runs fresh verification. Failed verification automatically rolls back. Changes are logged in `/etc/vps-setup/network-changes.log`; desired state is `/etc/vps-setup/network-mss.rules`.
+
+```bash
+sudo iptables -w -t mangle -S VPS-SENTINEL-MSS
+sudo iptables -w -t mangle -S FORWARD | grep VPS-SENTINEL-JUMP
+sudo vps-setup network mss-status
+sudo vps-setup network rollback          # immediate rollback to pre-repair state
+```
+
+Docker Swarm is initialized on Docker/Dokploy/Coolify install paths only when the node is `inactive`. `active` nodes are left untouched; `pending`, `locked` and `error` states are reported for manual handling. Use `VPS_SETUP_SWARM_ADVERTISE_ADDR` to control the advertise address.
+
+Proxy variables are shown with credentials redacted. The doctor never installs tools inside application containers, never uses a digest-less diagnostic sidecar by default, and never disables TLS verification.
 
 ## Watcher
 

@@ -64,19 +64,57 @@ The toolkit never runs `nft flush ruleset` and never deletes user chains or rule
 
 ## Docker recovery
 
-On systemd hosts, `vps-firewall-watch.service` runs `/usr/local/sbin/vps-firewall-watch`, which invokes `firewall.sh nft-reconcile` every `WATCH_INTERVAL` seconds (default 15). On non-systemd Linux hosts the toolkit installs a managed cron entry instead, calling `firewall.sh nft-reconcile` once per minute. If neither systemd nor cron exists, the watcher binary and unit are installed but a warning tells you to supply a supervisor. Because bridge/subnet discovery happens on every pass, the managed chain heals after:
+On systemd hosts, `vps-firewall-watch.service` runs `/usr/local/sbin/vps-firewall-watch`, which invokes both `firewall.sh nft-reconcile` and `scripts/network.sh reconcile` every `WATCH_INTERVAL` seconds (default 15). On non-systemd Linux hosts the toolkit installs a managed cron entry instead, calling the same reconciler once per minute. If neither systemd nor cron exists, the watcher binary and unit are installed but a warning tells you to supply a supervisor. Because bridge/subnet discovery happens on every pass, the managed chains heal after:
 
 - Docker daemon restart
 - bridge/network recreation (`br-*` name or subnet changes)
 - server reboot
 - accidental removal of the managed chain or jump
 - parent chain reappearing after being absent
+- WAN MTU or Docker bridge changes that alter the desired MSS rules
 
 If the generated ruleset is unchanged and the chain/jump exist, no write occurs (idempotent and quiet).
 
 The unit uses `Restart=always`, `NoNewPrivileges=true`, `PrivateTmp=true` and read/write paths limited to state/log directories. The cron fallback is marked with `# vps-setup firewall watch (managed)` so uninstall can remove only that line.
 
 UFW is the host-firewall backend the toolkit manages. If UFW is unavailable on a given distribution, base setup warns and skips host-firewall configuration; the toolkit never disables or replaces another firewall (for example firewalld) on its own.
+
+## Container network doctor and scoped MSS repair
+
+Docker-related install paths enable `ENABLE_MSS_CLAMP` and the network reconciler. The doctor is intentionally separate from the nftables/UFW managers: its only possible automatic change is an **iptables mangle** rule set under `VPS-SENTINEL-MSS`.
+
+| Item | Value |
+|---|---|
+| Managed chain | `VPS-SENTINEL-MSS` in `iptables -t mangle` |
+| Jump comment | `VPS-SENTINEL-JUMP` (single commented `FORWARD` jump) |
+| Rule comment | `VPS-SENTINEL-MSS <bridge>-<wan>` |
+| Desired state | `/etc/vps-setup/network-mss.rules` |
+| Change log | `/etc/vps-setup/network-changes.log` |
+| Backups | `/var/backups/vps-setup/<timestamp>/iptables-mangle.rules` |
+
+Rules are generated from the default-route interface (or `WAN_IF`) and every discovered Docker bridge/subnet (`docker0`, `docker_gwbridge`, `br-*`). They match only bridge → WAN, IPv4 source subnet, TCP SYN, and clamp to PMTU. The reconciler is idempotent: when interfaces, subnets and WAN are unchanged it writes nothing.
+
+Automatic repair requires all of the following:
+
+1. Host DNS/TCP succeeds while the container fails at TLS/application level.
+2. MTU evidence shows a Docker-side MTU greater than the WAN MTU.
+3. `ENABLE_MSS_CLAMP=1`.
+4. An operator reviews `--dry-run` and types `APPLY-NETWORK-REPAIR`.
+5. Fresh-connection verification succeeds; otherwise the change is rolled back automatically.
+
+The doctor reuses the administrator-approved outbound TCP ports as test targets. Set `NETWORK_TARGET_HOST` and `NETWORK_TARGET_PORT` in `/etc/default/vps-setup`, or pass `--target host:port --protocol https|http|...` to a CLI command. `NETWORK_TARGET_PORT` always wins; one allowed TCP port is selected automatically; interactive mode lists multiple allowed ports; non-interactive mode uses the first allowed port.
+
+It never disables UFW/nftables, flushes an entire ruleset, sets policies to ACCEPT, changes physical MTUs, recreates Swarm networks, exposes databases or the Docker API, disables TLS verification, or installs packages inside application containers.
+
+```bash
+sudo vps-setup network status
+sudo vps-setup network diagnose --container <id> --target host.example.test:443
+sudo vps-setup network repair --container <id> --target host.example.test:443 --dry-run
+sudo vps-setup network repair --container <id> --target host.example.test:443 --apply
+sudo vps-setup network verify --container <id> --target host.example.test:443
+sudo vps-setup network rollback [change-id]
+sudo vps-setup network mss-status
+```
 
 ## Guided firewall workflow
 
@@ -124,6 +162,9 @@ ip -4 route show default
 systemctl status vps-firewall-watch.service    # systemd hosts
 crontab -l | grep vps-setup                     # cron fallback
 journalctl -u vps-firewall-watch.service -n 100 --no-pager
+sudo iptables -w -t mangle -S VPS-SENTINEL-MSS
+sudo vps-setup network status
+sudo vps-setup network mss-status
 ```
 
 ## Rollback
@@ -140,7 +181,10 @@ Remove only toolkit-owned firewall objects after inspection:
 ```bash
 sudo nft -a list chain inet cloud_dev forward
 sudo nft -a list chain inet cloud_dev vps_docker_forward
+sudo iptables -w -t mangle -S VPS-SENTINEL-MSS
 # Menu 13 -> Uninstall -> opt in to "remove managed nftables chain/jump"
 ```
 
-The uninstall path only deletes jump rules carrying the toolkit comment, then flushes/deletes the managed chain. It leaves all other rules untouched. A full ruleset backup is written under `/var/backups/vps-setup/` first.
+The uninstall path only deletes jump rules carrying the toolkit comment, then flushes/deletes the managed chain. In `all` mode it also removes `VPS-SENTINEL-MSS`, its commented `FORWARD` jump and the network state/change log. It leaves all other rules untouched. A full ruleset backup is written under `/var/backups/vps-setup/` first.
+
+Immediate one-command rollback without uninstalling: `sudo vps-setup network rollback [change-id]`.

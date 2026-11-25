@@ -5,10 +5,10 @@
 On a fresh Linux VPS, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.5/install.sh -o install.sh && sudo bash install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.2.0/install.sh -o install.sh && sudo bash install.sh
 ```
 
-The command is pinned to release `v1.1.5`. The installer verifies the downloaded archive's SHA-256 against the checksum published in the `checksums` branch before installing anything, so no manual hash setup is needed for production use. A mismatch aborts the install.
+The command is pinned to release `v1.2.0`. The installer verifies the downloaded archive's SHA-256 against the checksum published in the `checksums` branch before installing anything, so no manual hash setup is needed for production use. A mismatch aborts the install.
 
 The installer copies the toolkit to `/usr/local/lib/vps-setup-toolkit`, creates `/usr/local/sbin/vps-setup`, and opens the interactive menu. No cloning is needed.
 
@@ -19,9 +19,9 @@ Reopen the menu any time with `sudo vps-setup`.
 1. Keep an existing SSH session open.
 2. Select the services you need (items 1-8). The toolkit asks to configure UFW/nftables **before** installing anything.
 3. When installation finishes, choose outbound access: one-by-one categories, the standard/reputed preset, all 20 documented categories, or skip.
-4. If you selected Docker Engine, Dokploy or Coolify, the `docker_gwbridge` Traefik ingress rules are enabled automatically and kept alive by the watcher.
-5. Use item **9)** to change outbound service ports later; item **10)** only for deliberate host inbound ports.
-6. Verify with item **12) System Status** and an external port check.
+4. If you selected Docker Engine, Dokploy or Coolify, Docker Swarm is initialized only when inactive, the `docker_gwbridge` Traefik ingress rules are enabled automatically, and the Container Network Doctor is enabled. The watcher keeps the managed rules alive.
+5. Use item **9)** to change outbound service ports later; item **10)** only for deliberate host inbound ports. The doctor reuses these allowed ports as its verification targets.
+6. Verify with item **12) System Status**, item **14) Container Network Doctor** and an external port check.
 
 ## Upgrade / re-run
 
@@ -29,7 +29,8 @@ Re-running the installer updates toolkit files while preserving `/etc/default/vp
 
 ```bash
 sudo bash install.sh --install-only
-sudo vps-setup run 11 --yes    # optional repair pass after an upgrade
+sudo vps-setup run 11 --yes            # optional general repair pass after an upgrade
+sudo vps-setup network status          # Docker, Swarm, MTU and managed MSS rules
 ```
 
 ## Uninstall
@@ -43,7 +44,7 @@ sudo /usr/local/lib/vps-setup-toolkit/scripts/uninstall.sh
 The uninstaller offers two options:
 
 1. **Delete only the toolkit** — removes the installed files, watcher, systemd unit and launcher, but keeps `/etc/default/vps-setup`, state, logs and all existing firewall rules. Choose this when you plan to reinstall or restore the toolkit later. Existing rules are no longer reconciled by the watcher until the toolkit is reinstalled.
-2. **Delete the toolkit with all configuration** — additionally removes the managed nftables chain/jump, toolkit-managed UFW outbound rules, config, state and logs.
+2. **Delete the toolkit with all configuration** — additionally removes the managed nftables chain/jump, managed MSS rules/state (`VPS-SENTINEL-MSS`), toolkit-managed UFW outbound rules, config, state and logs.
 
 Both options require the typed confirmation `UNINSTALL`. Non-interactive equivalents: `vps-setup uninstall keep-config` and `vps-setup uninstall all` (direct script: `sudo /usr/local/lib/vps-setup-toolkit/scripts/uninstall.sh keep-config|all`). Unrelated firewall rules and installed packages are never removed automatically.
 
@@ -67,7 +68,7 @@ The quick install above is the recommended path for almost everyone. The notes b
 <summary>Show SHA-256 / GPG verification steps</summary>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.5/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.2.0/install.sh -o install.sh
 chmod 700 install.sh
 less install.sh                       # review before running
 sudo bash install.sh                  # pinned release: checksum verified automatically
@@ -119,7 +120,7 @@ sudo bash install.sh --source-dir "$PWD"
 | Variable | Purpose | Default |
 |---|---|---|
 | `VPS_SETUP_REPO_URL` | GitHub repo used to build the codeload URL | `https://github.com/sayedatiqurrahman/vps-setup-toolkit` |
-| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.1.5` (pinned release) |
+| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.2.0` (pinned release) |
 | `VPS_SETUP_ARCHIVE_URL` | Explicit archive URL (any host) | derived from repo URL |
 | `VPS_SETUP_ARCHIVE_SHA256` | Expected archive SHA-256 | published checksum for pinned release |
 | `VPS_SETUP_SIGNATURE_URL` | Detached GPG signature URL | unset |
@@ -129,6 +130,10 @@ sudo bash install.sh --source-dir "$PWD"
 | `VPS_SETUP_INSTALL_ONLY=1` | Install without launching menu | unset |
 | `ALLOW_UNSUPPORTED_OS=1` | Permit vendor-specific steps on non-primary OS families | unset |
 | `VPS_SETUP_SKIP_FIREWALL=1` | Skip automatic firewall steps in `run --yes` | unset |
+| `VPS_SETUP_SWARM_ADVERTISE_ADDR` | Advertise address when initializing an inactive Docker Swarm | detected WAN IPv4 |
+| `VPS_SETUP_NO_NETWORK_AUTO_REPAIR=1` | Leave network doctor auto-repair disabled on Docker install paths | unset |
+| `VPS_SETUP_NETWORK_STATE` | Desired MSS rules file | `/etc/vps-setup/network-mss.rules` |
+| `VPS_SETUP_NETWORK_CHANGES` | Network repair change log | `/etc/vps-setup/network-changes.log` |
 
 ### OS and package-manager detection
 

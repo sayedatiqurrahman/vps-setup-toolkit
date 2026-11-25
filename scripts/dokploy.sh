@@ -17,6 +17,10 @@ if [[ -z "${FIREWALL_LOADED:-}" ]]; then
   # shellcheck source=firewall.sh
   source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/firewall.sh"
 fi
+if [[ -z "${NETWORK_LOADED:-}" ]]; then
+  # shellcheck source=network.sh
+  source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/network.sh"
+fi
 
 DOKPLOY_INSTALLER_URL="https://dokploy.com/install.sh"
 
@@ -59,6 +63,9 @@ dokploy_install(){
     return 1
   fi
   rm -f -- "$installer_tmp"
+
+  docker_swarm_ensure || warn "Docker Swarm could not be initialized; Dokploy overlay networking may be limited."
+  network_enable_for_docker "${VPS_SETUP_INTERACTIVE:-1}" || warn "Container network auto-repair could not be enabled."
 
   read -r -p "Enable managed HTTP/HTTPS forwarding to Traefik? [y/N]: " ingress || ingress=""
   if [[ "$ingress" =~ ^[Yy]$ ]]; then

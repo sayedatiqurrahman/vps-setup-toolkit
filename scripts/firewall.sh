@@ -35,8 +35,12 @@ CUSTOM_UDP_PORTS=""
 MANAGED_UFW_TCP=""
 MANAGED_UFW_UDP=""
 ENABLE_DOKPLOY_INGRESS=0
+ENABLE_MSS_CLAMP=0
 TRAEFIK_IP="10.0.2.2"
 TRAEFIK_BRIDGE="docker_gwbridge"
+NETWORK_TARGET_HOST=""
+NETWORK_TARGET_PORT=""
+NETWORK_PROTOCOL="https"
 
 # Outbound presets. "Standard" means the well-known services a typical server
 # needs for updates, DNS, time, git and mail. Database/S3 categories are kept
@@ -71,8 +75,12 @@ load_config(){
   MANAGED_UFW_TCP=""
   MANAGED_UFW_UDP=""
   ENABLE_DOKPLOY_INGRESS=0
+  ENABLE_MSS_CLAMP=0
   TRAEFIK_IP="10.0.2.2"
   TRAEFIK_BRIDGE="docker_gwbridge"
+  NETWORK_TARGET_HOST=""
+  NETWORK_TARGET_PORT=""
+  NETWORK_PROTOCOL="https"
   NFT_FAMILY="inet"
   NFT_TABLE="cloud_dev"
   NFT_PARENT="forward"
@@ -90,6 +98,28 @@ load_config(){
     ENABLE_DOKPLOY_INGRESS=1
   else
     ENABLE_DOKPLOY_INGRESS=0
+  fi
+  if config_bool "$ENABLE_MSS_CLAMP"; then
+    ENABLE_MSS_CLAMP=1
+  else
+    ENABLE_MSS_CLAMP=0
+  fi
+  NETWORK_TARGET_HOST="${NETWORK_TARGET_HOST//[[:space:]]/}"
+  if [[ -n "$NETWORK_TARGET_HOST" && ! "$NETWORK_TARGET_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,252}$ ]]; then
+    warn "Invalid NETWORK_TARGET_HOST in config; ignoring it."
+    NETWORK_TARGET_HOST=""
+  fi
+  if [[ -n "$NETWORK_TARGET_PORT" ]]; then
+    if valid_port "$NETWORK_TARGET_PORT"; then
+      NETWORK_TARGET_PORT="$((10#$NETWORK_TARGET_PORT))"
+    else
+      warn "Invalid NETWORK_TARGET_PORT in config; ignoring it."
+      NETWORK_TARGET_PORT=""
+    fi
+  fi
+  if [[ ! "$NETWORK_PROTOCOL" =~ ^[a-z0-9-]{2,20}$ ]]; then
+    warn "Invalid NETWORK_PROTOCOL in config; using https."
+    NETWORK_PROTOCOL="https"
   fi
   if ! valid_ipv4 "$TRAEFIK_IP"; then
     warn "Invalid TRAEFIK_IP in config; falling back to 10.0.2.2."
@@ -140,8 +170,12 @@ CUSTOM_UDP_PORTS="${CUSTOM_UDP_PORTS:-}"
 MANAGED_UFW_TCP="${MANAGED_UFW_TCP:-}"
 MANAGED_UFW_UDP="${MANAGED_UFW_UDP:-}"
 ENABLE_DOKPLOY_INGRESS="${ENABLE_DOKPLOY_INGRESS:-0}"
+ENABLE_MSS_CLAMP="${ENABLE_MSS_CLAMP:-0}"
 TRAEFIK_IP="${TRAEFIK_IP:-10.0.2.2}"
 TRAEFIK_BRIDGE="${TRAEFIK_BRIDGE:-docker_gwbridge}"
+NETWORK_TARGET_HOST="${NETWORK_TARGET_HOST:-}"
+NETWORK_TARGET_PORT="${NETWORK_TARGET_PORT:-}"
+NETWORK_PROTOCOL="${NETWORK_PROTOCOL:-https}"
 NFT_FAMILY="${NFT_FAMILY:-inet}"
 NFT_TABLE="${NFT_TABLE:-cloud_dev}"
 NFT_PARENT="${NFT_PARENT:-forward}"
@@ -415,7 +449,12 @@ firewall_preflight(){
   done
   if (( docker_selected )); then
     ENABLE_DOKPLOY_INGRESS=1
-    log "Automatic docker_gwbridge/Traefik ingress rules enabled; the watcher will keep them applied."
+    ENABLE_MSS_CLAMP=1
+    log "Automatic docker_gwbridge/Traefik ingress and evidence-based MSS repair enabled."
+    if declare -F network_configure_from_allowed_ports >/dev/null 2>&1; then
+      network_configure_from_allowed_ports "$interactive" \
+        || warn "Dynamic target selection was deferred; pass --target to the network doctor later."
+    fi
   fi
   save_config || return 1
   nft_apply || warn "nftables chain could not be applied now; the watcher will retry."
@@ -447,6 +486,16 @@ firewall_postflight(){
   else
     log "Non-interactive run: applying the standard/reputed outbound service preset."
     apply_service_preset "$STANDARD_SERVICE_IDS" "standard/reputed services (non-interactive default)" 1
+  fi
+  # The allowed port list is only final after the service menu/preset above.
+  # Persist the doctor's dynamic target here; interactive runs are asked to
+  # choose when more than one TCP port is allowed, non-interactive runs use the
+  # first allowed port deterministically.
+  load_config || return 1
+  if config_bool "$ENABLE_MSS_CLAMP" \
+     && declare -F network_configure_from_allowed_ports >/dev/null 2>&1; then
+    network_configure_from_allowed_ports "$interactive" \
+      || warn "Dynamic network target was deferred; pass --target to the doctor later."
   fi
 }
 
@@ -835,6 +884,9 @@ install_cron_watcher(){
     printf '%s\n' "$marker"
     printf '* * * * * %s/scripts/firewall.sh nft-reconcile >>%s/firewall-watch.log 2>&1\n' \
       "$INSTALL_DIR" "$LOG_DIR"
+    printf '%s\n' "$marker"
+    printf '* * * * * %s/scripts/network.sh reconcile 0 >>%s/firewall-watch.log 2>&1\n' \
+      "$INSTALL_DIR" "$LOG_DIR"
   } >>"$cron_tmp"
   if crontab "$cron_tmp"; then
     rm -f -- "$cron_tmp"
@@ -866,8 +918,12 @@ start_watcher(){
   fi
   if is_systemd && [[ -f "$unit_src" ]]; then
     systemctl daemon-reload || return 1
-    systemctl enable --now "$UNIT_NAME" || return 1
-    success "Persistent firewall watcher enabled (${UNIT_NAME})."
+    if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
+      systemctl restart "$UNIT_NAME" || return 1
+    else
+      systemctl enable --now "$UNIT_NAME" || return 1
+    fi
+    success "Persistent firewall and network watcher enabled (${UNIT_NAME})."
   else
     warn "systemd is not running here; using the portable cron fallback."
     install_cron_watcher || warn "No persistent watcher could be installed."

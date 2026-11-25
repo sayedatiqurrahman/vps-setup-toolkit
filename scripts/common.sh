@@ -8,8 +8,11 @@
 COMMON_LOADED=1
 
 APP_NAME="vps-setup"
-APP_VERSION="1.1.5"
+APP_VERSION="1.2.0"
 TOOLKIT_NAME="VPS Setup Toolkit"
+# Interactive runs may prompt for a target port when several are allowed.
+# Non-interactive `run ... --yes` stays deterministic and never prompts.
+VPS_SETUP_INTERACTIVE="${VPS_SETUP_INTERACTIVE:-1}"
 
 # Persistent state. /etc/default/vps-setup is kept for compatibility with the
 # original complete-vps-setup-security-guide.md script.

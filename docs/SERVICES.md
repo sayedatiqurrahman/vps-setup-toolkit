@@ -19,7 +19,7 @@ Installs a family-appropriate set of core tools. On apt systems: `ca-certificate
 
 ## Docker Engine (menu 3)
 
-Adds Docker's signed apt repository for Debian/Ubuntu-family systems using the detected codename and architecture, installs `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`, and enables the daemon. On other families, distribution Docker packages are used only when `ALLOW_UNSUPPORTED_OS=1` is set. The firewall watcher is installed in all cases (systemd unit or cron fallback), and automatic `docker_gwbridge` Traefik ingress rules are enabled. Docker's unauthenticated TCP API is never enabled.
+Adds Docker's signed apt repository for Debian/Ubuntu-family systems using the detected codename and architecture, installs `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`, and enables the daemon. On other families, distribution Docker packages are used only when `ALLOW_UNSUPPORTED_OS=1` is set. The firewall watcher is installed in all cases (systemd unit or cron fallback), automatic `docker_gwbridge` Traefik ingress rules are enabled, Docker Swarm is initialized only if inactive, and the Container Network Doctor is enabled. Docker's unauthenticated TCP API is never enabled.
 
 ## Dokploy (menu 4) and Coolify (menu 5)
 
@@ -31,7 +31,7 @@ Both launchers:
 - download the official installer to a temporary file (never pipe directly into a shell),
 - show its SHA-256 before asking permission to execute.
 
-Dokploy additionally enables managed HTTP/HTTPS forwarding to Traefik at `TRAEFIK_IP` on `TRAEFIK_BRIDGE` automatically when launched from the main menu; the rules (`DOKPLOY-INGRESS` / `DOKPLOY-RETURN`) are re-applied by the watcher after every reboot. Selecting both panels in one menu operation requires an explicit `BOTH-PANELS-INTENTIONAL` confirmation; they are never installed together automatically.
+Both paths also initialize Docker Swarm only when inactive and enable the Container Network Doctor for evidence-based MSS repair, without leaving or re-creating an existing Swarm. Dokploy additionally enables managed HTTP/HTTPS forwarding to Traefik at `TRAEFIK_IP` on `TRAEFIK_BRIDGE` automatically when launched from the main menu; the rules (`DOKPLOY-INGRESS` / `DOKPLOY-RETURN`) are re-applied by the watcher after every reboot. Selecting both panels in one menu operation requires an explicit `BOTH-PANELS-INTENTIONAL` confirmation; they are never installed together automatically.
 
 ## PHP, Nginx and WordPress prerequisites (menus 6 and 7)
 
@@ -84,8 +84,11 @@ IDs 21/22 accept custom TCP/UDP ports. All input is validated (1-65535), de-dupl
 
 Adds/removes host inbound UFW rules. A trusted IPv4/CIDR is preferred; public access needs confirmation, and sensitive ports need typed authorization. The toolkit never opens Docker API or database ports publicly by default.
 
-## Repair, status and uninstall (menus 11-13)
+## Repair, status, uninstall and network doctor (menus 11-14)
 
 - **Repair**: recreates missing config, reapplies UFW/nftables, reinstalls the watcher, and can restore a validated nftables ruleset from a file.
 - **Status**: OS, installed components, service states, UFW, Docker bridges, managed chain and watcher.
-- **Uninstall**: typed `UNINSTALL` confirmation; optional, separate cleanup of managed nftables chain/jump, managed UFW egress rules, and config/state/logs.
+- **Uninstall**: typed `UNINSTALL` confirmation; optional, separate cleanup of managed nftables chain/jump, managed UFW egress rules, managed MSS rules, and config/state/logs.
+- **Container Network Doctor** (menu 14): read-only status/containers/diagnosis, dry-run/apply repair, fresh-connection verification, rollback and rule reconciliation. The CLI equivalents are `vps-setup network status|containers|diagnose|test|repair|verify|rollback|watch`.
+
+Target ports come from the allowed outbound TCP ports configured in menu 9 (plus custom TCP ports): an explicit `NETWORK_TARGET_PORT` wins, one allowed port is auto-selected, multiple ports are offered interactively, and non-interactive runs choose the first allowed port deterministically. Automatic repair is limited to MTU/MSS failures with supporting evidence and requires explicit `APPLY-NETWORK-REPAIR` confirmation. See [`FIREWALL.md`](FIREWALL.md#container-network-doctor-and-scoped-mss-repair).

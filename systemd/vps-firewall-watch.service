@@ -1,5 +1,5 @@
 [Unit]
-Description=VPS Setup Toolkit - persistent Docker bridge firewall reconciler
+Description=VPS Setup Toolkit - persistent Docker firewall and network reconciler
 Documentation=file:///usr/local/lib/vps-setup-toolkit/docs/FIREWALL.md
 After=network-online.target nftables.service docker.service
 Wants=network-online.target
@@ -14,7 +14,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/etc/vps-setup /var/log/vps-setup /run
+ReadWritePaths=/etc/vps-setup /var/log/vps-setup /var/backups/vps-setup /run
 
 [Install]
 WantedBy=multi-user.target

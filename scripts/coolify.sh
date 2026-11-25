@@ -16,6 +16,10 @@ if [[ -z "${FIREWALL_LOADED:-}" ]]; then
   # shellcheck source=firewall.sh
   source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/firewall.sh"
 fi
+if [[ -z "${NETWORK_LOADED:-}" ]]; then
+  # shellcheck source=network.sh
+  source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/network.sh"
+fi
 
 COOLIFY_INSTALLER_URL="https://cdn.coollabs.io/coolify/install.sh"
 
@@ -60,6 +64,8 @@ coolify_install(){
   fi
   rm -f -- "$installer_tmp"
 
+  docker_swarm_ensure || warn "Docker Swarm could not be initialized; overlay networking may be unavailable."
+  network_enable_for_docker "${VPS_SETUP_INTERACTIVE:-1}" || warn "Container network auto-repair could not be enabled."
   start_watcher || warn "Watcher installation failed; use Repair and Recovery."
   success "Coolify launch finished."
 }

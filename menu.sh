@@ -7,7 +7,7 @@ set -Eeuo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/scripts/common.sh"
 
 # All module names are a fixed internal list; no user input is involved.
-for _module in system firewall docker nodejs pm2 php nginx wordpress dokploy coolify security recovery status uninstall; do
+for _module in system firewall docker network nodejs pm2 php nginx wordpress dokploy coolify security recovery status uninstall; do
   # shellcheck disable=SC1090
   source "${SCRIPT_DIR}/${_module}.sh"
 done
@@ -30,6 +30,7 @@ ACTION_NAMES=(
   "Repair and Recovery"
   "System Status"
   "Uninstall Toolkit"
+  "Container Network Doctor"
 )
 
 print_menu(){
@@ -49,6 +50,7 @@ print_menu(){
  11) Repair and Recovery
  12) System Status
  13) Uninstall Toolkit
+ 14) Container Network Doctor
   0) Exit
 
 Enter one number or several separated by commas (example: 2,3,4,9).
@@ -104,6 +106,7 @@ run_action(){
     11) recovery_menu ;;
     12) system_status ;;
     13) uninstall_toolkit ;;
+    14) network_menu ;;
     *) error "Unknown action id: $1"; return 1 ;;
   esac
 }
@@ -135,8 +138,8 @@ main_menu(){
     case "$answer" in
       0|q|Q) log "Exiting."; exit 0 ;;
     esac
-    if ! parse_menu_selection "$answer" 13; then
-      warn "Invalid selection (${MENU_PARSE_ERROR}). Use numbers 0-13, comma-separated."
+    if ! parse_menu_selection "$answer" 14; then
+      warn "Invalid selection (${MENU_PARSE_ERROR}). Use numbers 0-14, comma-separated."
       continue
     fi
     if print_selection_summary "${MENU_IDS[@]}"; then
@@ -165,6 +168,7 @@ Usage:
   vps-setup run 2,3,9 --yes    Run selected categories without prompts
   vps-setup status             Read-only system/firewall status
   vps-setup firewall STATUS    Firewall subcommand (select|apply|status|...)
+  vps-setup network STATUS     Container Network Doctor (status|diagnose|test|...)
   vps-setup uninstall MODE     Uninstall (keep-config|all; no arg = prompt)
   vps-setup --version          Print version
   vps-setup --help             Show this help
@@ -201,8 +205,9 @@ case "${1:-menu}" in
       error "Non-interactive runs require explicit confirmation: vps-setup run <ids> --yes"
       exit 1
     fi
-    parse_menu_selection "$selection" 13 || die "Invalid selection (${MENU_PARSE_ERROR})."
+    parse_menu_selection "$selection" 14 || die "Invalid selection (${MENU_PARSE_ERROR})."
     print_selection_summary "${MENU_IDS[@]}" || die "Selection rejected."
+    VPS_SETUP_INTERACTIVE=0
     if selection_has_service_actions "${MENU_IDS[@]}" && [[ "${VPS_SETUP_SKIP_FIREWALL:-0}" != "1" ]]; then
       firewall_preflight 0 "${MENU_IDS[@]}" || warn "Firewall preflight reported a problem."
     fi
@@ -221,6 +226,12 @@ case "${1:-menu}" in
     init_runtime
     shift
     firewall_cli "$@"
+    ;;
+  network)
+    need_root
+    init_runtime
+    shift
+    network_cli "$@"
     ;;
   uninstall)
     need_root

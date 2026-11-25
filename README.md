@@ -25,6 +25,7 @@ VPS Sentinel installs only what you select, keeps inbound access restrictive by 
 - [How it works](#how-it-works)
   - [Firewall-first workflow](#firewall-first-workflow)
   - [Automatic Docker / Traefik ingress](#automatic-docker--traefik-ingress)
+  - [Container network doctor](#container-network-doctor)
   - [Firewall security model](#firewall-security-model)
 - [Menu options](#menu-options)
 - [Configuration paths](#configuration-paths)
@@ -41,10 +42,10 @@ VPS Sentinel installs only what you select, keeps inbound access restrictive by 
 Run this on your VPS as root (or with `sudo` available). No cloning required:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.5/install.sh -o install.sh && sudo bash install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.2.0/install.sh -o install.sh && sudo bash install.sh
 ```
 
-That is it. The command is pinned to release `v1.1.5`: the installer downloads that release's archive and **automatically verifies its SHA-256** against the checksum published in the `checksums` branch. No warnings, no manual hash setup — safe for production.
+That is it. The command is pinned to release `v1.2.0`: the installer downloads that release's archive and **automatically verifies its SHA-256** against the checksum published in the `checksums` branch. No warnings, no manual hash setup — safe for production.
 
 The installer places the toolkit in `/usr/local/lib/vps-setup-toolkit`, creates the `vps-setup` launcher, and opens the interactive menu.
 
@@ -63,6 +64,8 @@ sudo vps-setup                       # interactive menu
 sudo vps-setup run 1,3,9 --yes       # non-interactive; --yes is explicit confirmation
 sudo vps-setup status                # read-only status report
 sudo vps-setup firewall select       # jump straight to the outbound service selector
+sudo vps-setup network status        # Docker, Swarm, MTU and managed MSS rules
+sudo vps-setup network diagnose --container web --target api.example.test:443
 ```
 
 Enter several category numbers at the prompt, separated by commas — for example `2,3,4,9`. You always see a summary and confirm before anything is installed.
@@ -92,6 +95,29 @@ Selecting Docker Engine, Dokploy or Coolify (menu items **3, 4, 5**) enables man
 
 The Traefik address is detected from the running container when possible; otherwise `TRAEFIK_IP` from `/etc/default/vps-setup` is used (default `10.0.2.2`). You never need to insert these rules by hand.
 
+### Container network doctor
+
+Every Docker-related install path (Docker Engine, Dokploy and Coolify) also:
+
+1. Initializes Docker Swarm only when the node is `inactive`. An already `active` Swarm is left untouched; `pending`, `locked` and `error` states are reported, never reinitialized. Set `VPS_SETUP_SWARM_ADVERTISE_ADDR` to choose the advertise IP, or let the toolkit detect the WAN IPv4.
+2. Enables the **Sentinel Container Network Doctor** and its reconciliation loop.
+
+The doctor compares host and container DNS, TCP, TLS and application probes, inventories container network attachments/MTUs, and reads proxy settings with credentials redacted. It uses the ports already allowed by the outbound firewall selector: an explicit `NETWORK_TARGET_PORT` wins, one allowed TCP port is auto-selected, interactive runs choose among multiple allowed ports, and non-interactive runs use the first allowed port deterministically.
+
+Diagnosis is read-only. A repair is only proposed for an MTU/MSS failure when the MTU evidence supports it. After `--dry-run` and explicit typed approval, the doctor installs one scoped TCP MSS clamp per discovered Docker bridge in the toolkit-owned `VPS-SENTINEL-MSS` mangle chain, verifies fresh connections, and rolls back automatically if verification fails. It never disables UFW/nftables, flushes a full ruleset, changes physical MTUs, recreates Swarm networks, opens databases/Docker API, or disables TLS verification.
+
+```bash
+sudo vps-setup network status
+sudo vps-setup network containers
+sudo vps-setup network diagnose --container <id-or-name> --target host.example.test:443 --protocol https
+sudo vps-setup network repair --container <id-or-name> --target host.example.test:443 --dry-run
+sudo vps-setup network repair --container <id-or-name> --target host.example.test:443 --apply
+sudo vps-setup network verify --container <id-or-name> --target host.example.test:443
+sudo vps-setup network rollback [change-id]
+```
+
+Menu 14 exposes the same actions. See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md#container-works-on-host-but-not-inside-docker) for a safe investigation sequence.
+
 ### Firewall security model
 
 - **Outbound selection** adds explicit `ufw allow out` rules and permits those destination ports in the toolkit-owned `inet cloud_dev vps_docker_forward` nftables chain for detected Docker bridges.
@@ -107,9 +133,9 @@ Full details: [`docs/FIREWALL.md`](docs/FIREWALL.md).
 |---|---|---|
 | 1 | Base utilities | Package index for the detected manager, core tools, UFW defaults, detected SSH port preserved |
 | 2 | Node.js + PM2 | NodeSource 18/20/22 (default 22), npm, optional pnpm, global PM2 |
-| 3 | Docker Engine | Docker CE, Compose/Buildx plugins, firewall watcher, automatic Traefik ingress |
-| 4 | Dokploy | Official installer launcher, managed Traefik 80/443 ingress |
-| 5 | Coolify | Official installer launcher; mutually intentional with Dokploy |
+| 3 | Docker Engine | Docker CE, Compose/Buildx plugins, Swarm, network doctor, firewall watcher, Traefik ingress |
+| 4 | Dokploy | Official installer launcher, Swarm, network doctor, managed Traefik 80/443 ingress |
+| 5 | Coolify | Official installer launcher, Swarm and network doctor; mutually intentional with Dokploy |
 | 6 | PHP + Nginx | Distro PHP-FPM (or chosen X.Y), common extensions, Nginx |
 | 7 | WordPress prerequisites | Nginx/PHP and required extensions; WordPress deployed separately |
 | 8 | SSH security | Checklist, read-only audit, optional hardening, Fail2ban |
@@ -118,6 +144,7 @@ Full details: [`docs/FIREWALL.md`](docs/FIREWALL.md).
 | 11 | Repair and recovery | Config/UFW/nftables/watcher repair, ruleset restore |
 | 12 | System status | OS, components, services, UFW, bridges, managed chain, watcher |
 | 13 | Uninstall | Choose: toolkit only (keep config) or toolkit with all configuration and managed firewall rules |
+| 14 | Container Network Doctor | Status, containers, diagnosis, dry-run/apply repair, verification, rollback, reconciliation |
 
 Dokploy and Coolify selected together require an extra typed confirmation; they are never installed together automatically.
 
@@ -128,7 +155,7 @@ Dokploy and Coolify selected together require an extra typed confirmation; they 
 | `/usr/local/lib/vps-setup-toolkit` | Installed toolkit files |
 | `/usr/local/sbin/vps-setup` | Menu launcher |
 | `/etc/default/vps-setup` | Persistent config (same path as the original guide) |
-| `/etc/vps-setup/` | State (host inbound rules, last applied nftables rules) |
+| `/etc/vps-setup/` | State (host inbound rules, last applied nftables rules, desired MSS rules, network change log) |
 | `/var/log/vps-setup/` | Setup and watcher logs |
 | `/var/backups/vps-setup/` | Timestamped backups of modified files/rulesets |
 
@@ -142,6 +169,12 @@ systemctl status vps-firewall-watch.service          # systemd hosts
 crontab -l | grep vps-setup                           # cron fallback
 journalctl -u vps-firewall-watch.service -n 100 --no-pager
 ip -br -4 addr | grep -E 'docker|br-'
+
+# Host works but a container fails:
+sudo vps-setup network status
+sudo vps-setup network containers
+sudo vps-setup network diagnose --container <id-or-name> --target host.example.test:443
+sudo vps-setup network verify --container <id-or-name> --target host.example.test:443
 ```
 
 If `inet cloud_dev forward` is absent, set `NFT_TABLE`/`NFT_PARENT` in `/etc/default/vps-setup` to an existing table/chain after reviewing `nft list ruleset`. The toolkit deliberately will not create a competing firewall policy.
@@ -155,7 +188,7 @@ bash -n $(find . -name '*.sh' -type f)
 bash tests/run-tests.sh
 ```
 
-The suite covers validation, firewall behaviour (stubbed `ip`/`ufw`/`nft`/`systemctl`) and OS/package-manager detection via `/etc/os-release` fixtures. It never touches a real firewall or installs real packages. See [`tests/`](tests).
+The suite covers validation, firewall behaviour, container network diagnosis/repair/rollback (stubbed `docker`/`ip`/`iptables`/`ufw`/`nft`/`systemctl`) and OS/package-manager detection via `/etc/os-release` fixtures. It never touches a real firewall, container or package. See [`tests/`](tests).
 
 ## Contributing
 
@@ -192,7 +225,7 @@ Add `--install-only` to install without opening the menu.
 The pinned [quick installation](#quick-installation) verifies SHA-256 automatically. For a custom ref or archive, supply the hash explicitly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.1.5/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.2.0/install.sh -o install.sh
 export VPS_SETUP_REF=main
 export VPS_SETUP_ARCHIVE_SHA256="<sha256-of-archive-tar.gz>"
 sudo bash install.sh
@@ -216,7 +249,7 @@ A custom ref/archive without a supplied hash or signature is rejected by default
 | Variable | Purpose | Default |
 |---|---|---|
 | `VPS_SETUP_REPO_URL` | GitHub repo used to build the codeload URL | `https://github.com/sayedatiqurrahman/vps-setup-toolkit` |
-| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.1.5` (pinned release) |
+| `VPS_SETUP_REF` | Branch/tag for the archive | `v1.2.0` (pinned release) |
 | `VPS_SETUP_ARCHIVE_URL` | Explicit archive URL (any host) | derived from repo URL |
 | `VPS_SETUP_ARCHIVE_SHA256` | Expected archive SHA-256 | published checksum for pinned release |
 | `VPS_SETUP_SIGNATURE_URL` | Detached GPG signature URL | unset |
@@ -226,6 +259,10 @@ A custom ref/archive without a supplied hash or signature is rejected by default
 | `VPS_SETUP_INSTALL_ONLY=1` | Install without launching menu | unset |
 | `ALLOW_UNSUPPORTED_OS=1` | Permit vendor-specific steps on non-primary OS families | unset |
 | `VPS_SETUP_SKIP_FIREWALL=1` | Skip automatic firewall steps in `run --yes` | unset |
+| `VPS_SETUP_SWARM_ADVERTISE_ADDR` | Advertise address used when initializing an inactive Swarm | detected WAN IPv4 |
+| `VPS_SETUP_NO_NETWORK_AUTO_REPAIR=1` | Do not enable the network doctor on Docker install paths | unset |
+| `VPS_SETUP_NETWORK_STATE` | Override the desired MSS rules state path | `/etc/vps-setup/network-mss.rules` |
+| `VPS_SETUP_NETWORK_CHANGES` | Override the network change log path | `/etc/vps-setup/network-changes.log` |
 
 </details>
 

@@ -18,6 +18,10 @@ if [[ -z "${FIREWALL_LOADED:-}" ]]; then
   # shellcheck source=firewall.sh
   source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/firewall.sh"
 fi
+if [[ -z "${NETWORK_LOADED:-}" ]]; then
+  # shellcheck source=network.sh
+  source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/network.sh"
+fi
 
 remove_managed_nft(){
   local -a handles=()
@@ -106,13 +110,15 @@ UNINST
 
   if (( remove_nft == 1 )); then remove_managed_nft; fi
   if (( remove_ufw == 1 )); then remove_managed_ufw_egress; fi
+  if (( remove_data == 1 )); then network_cleanup; fi
 
   if [[ -n "$INSTALL_DIR" && "$INSTALL_DIR" != "/" && -d "$INSTALL_DIR" ]]; then
     rm -rf -- "$INSTALL_DIR"
   fi
 
   if (( remove_data == 1 )); then
-    rm -f -- "$CONF_FILE" "$INBOUND_RULES_FILE" "$NFT_STATE_FILE"
+    rm -f -- "$CONF_FILE" "$INBOUND_RULES_FILE" "$NFT_STATE_FILE" \
+      "$NETWORK_STATE_FILE" "$NETWORK_CHANGE_LOG"
     rm -rf -- "$STATE_DIR" "$LOG_DIR"
   fi
 

@@ -14,6 +14,10 @@ if [[ -z "${FIREWALL_LOADED:-}" ]]; then
   # shellcheck source=firewall.sh
   source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/firewall.sh"
 fi
+if [[ -z "${NETWORK_LOADED:-}" ]]; then
+  # shellcheck source=network.sh
+  source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/network.sh"
+fi
 
 docker_installed(){ command_exists docker && docker info >/dev/null 2>&1; }
 docker_compose_installed(){ command_exists docker && docker compose version >/dev/null 2>&1; }
@@ -86,6 +90,10 @@ docker_install(){
   fi
 
   service_enable docker || warn "Could not start the docker service automatically."
+
+  # Swarm and the container network reconciler are part of every Docker install.
+  docker_swarm_ensure || warn "Docker Swarm could not be initialized; overlay networks may be unavailable."
+  network_enable_for_docker "${VPS_SETUP_INTERACTIVE:-1}" || warn "Container network auto-repair could not be enabled."
 
   # Docker bridge creation changes the interfaces this toolkit must reconcile.
   start_watcher || warn "Firewall watcher installation failed."

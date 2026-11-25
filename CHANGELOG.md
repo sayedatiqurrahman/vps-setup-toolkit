@@ -2,6 +2,22 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.2.0] - 2026-11-25
+
+### Added
+
+- Sentinel Container Network Doctor integrated into the toolkit: Docker/Swarm/network inventory, host-versus-container DNS/TCP/TLS/application probes, proxy redaction, read-only diagnosis and root-cause reporting.
+- Safe evidence-based MSS repair with a toolkit-owned `VPS-SENTINEL-MSS` iptables mangle chain, scoped bridge-to-WAN rules, mangle backup, dry-run, typed approval, fresh-connection verification, logging and one-command rollback.
+- Dynamic verification targets derived from allowed outbound TCP ports: explicit `NETWORK_TARGET_PORT` wins, one port is auto-selected, multiple ports prompt interactively, and non-interactive runs use the first allowed port deterministically.
+- CLI `vps-setup network status|containers|diagnose|test|repair|verify|rollback|watch` plus menu 14 with the same actions.
+- Docker Swarm initialization on every Docker-related install path, only for inactive nodes; active Swarms are left untouched and locked/error/pending states are reported.
+- Network reconciliation in the firewall watcher/cron fallback and automatic enablement after Docker Engine, Dokploy or Coolify installation.
+- Container network doctor test suite with stubbed Docker, iptables and probe commands; network state and change-log cleanup in uninstall `all` mode.
+
+### Safety
+
+- No full ruleset flush, firewall policy change, physical MTU change, Swarm recreation, database/Docker API exposure, TLS verification bypass or package installation inside application containers.
+
 ## [1.1.5] - 2026-11-23
 
 ### Removed

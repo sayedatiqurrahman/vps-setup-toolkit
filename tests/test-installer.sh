@@ -115,6 +115,8 @@ menu_rc=$?
 set -e
 check "installed menu starts" "0" "$menu_rc"
 assert_true "installed menu shows usage" grep -q "Usage:" "$TEST_TMP/menu.stdout.log"
+assert_true "usage lists network commands" grep -q "vps-setup network STATUS" "$TEST_TMP/menu.stdout.log"
+assert_true "network module installed" test -f "$GOOD_HOME/scripts/network.sh"
 assert_true "banner shown before help" grep -q "VPS SENTINEL" "$TEST_TMP/menu.stdout.log"
 assert_false "installed menu has no source errors" grep -q "No such file or directory" "$TEST_TMP/menu.stderr.log"
 
@@ -129,6 +131,7 @@ set -e
 check "interactive menu exits cleanly" "0" "$interactive_rc"
 assert_true "banner shown on first menu launch" grep -q "VPS SENTINEL" "$TEST_TMP/menu-interactive.log"
 assert_true "menu shown after banner" grep -q "VPS SETUP MENU" "$TEST_TMP/menu-interactive.log"
+assert_true "menu lists Container Network Doctor" grep -q "14) Container Network Doctor" "$TEST_TMP/menu-interactive.log"
 
 # --- checksum mismatch is rejected -----------------------------------------
 MISMATCH_HOME="$TEST_TMP/install-mismatch"
