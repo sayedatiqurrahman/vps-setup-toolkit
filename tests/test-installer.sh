@@ -132,6 +132,7 @@ check "interactive menu exits cleanly" "0" "$interactive_rc"
 assert_true "banner shown on first menu launch" grep -q "VPS SENTINEL" "$TEST_TMP/menu-interactive.log"
 assert_true "menu shown after banner" grep -q "VPS SETUP MENU" "$TEST_TMP/menu-interactive.log"
 assert_true "menu lists Container Network Doctor" grep -q "14) Container Network Doctor" "$TEST_TMP/menu-interactive.log"
+assert_true "menu lists Unified Service Access" grep -q "15) Unified Service Access" "$TEST_TMP/menu-interactive.log"
 
 # --- checksum mismatch is rejected -----------------------------------------
 MISMATCH_HOME="$TEST_TMP/install-mismatch"

@@ -7,7 +7,7 @@ set -Eeuo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/scripts/common.sh"
 
 # All module names are a fixed internal list; no user input is involved.
-for _module in system firewall docker network nodejs pm2 php nginx wordpress dokploy coolify security recovery status uninstall; do
+for _module in system firewall docker network dns nodejs pm2 php nginx wordpress dokploy coolify security recovery status uninstall; do
   # shellcheck disable=SC1090
   source "${SCRIPT_DIR}/${_module}.sh"
 done
@@ -31,6 +31,8 @@ ACTION_NAMES=(
   "System Status"
   "Uninstall Toolkit"
   "Container Network Doctor"
+  "Unified Service Access (Host + Docker Containers)"
+  "DNS & Domain Routing (Cloudflare)"
 )
 
 print_menu(){
@@ -51,6 +53,8 @@ print_menu(){
  12) System Status
  13) Uninstall Toolkit
  14) Container Network Doctor
+ 15) Unified Service Access (Host + Docker Containers)
+ 16) DNS & Domain Routing (Cloudflare)
   0) Exit
 
 Enter one number or several separated by commas (example: 2,3,4,9).
@@ -107,6 +111,8 @@ run_action(){
     12) system_status ;;
     13) uninstall_toolkit ;;
     14) network_menu ;;
+    15) unified_service_menu ;;
+    16) dns_menu ;;
     *) error "Unknown action id: $1"; return 1 ;;
   esac
 }
@@ -138,8 +144,8 @@ main_menu(){
     case "$answer" in
       0|q|Q) log "Exiting."; exit 0 ;;
     esac
-    if ! parse_menu_selection "$answer" 14; then
-      warn "Invalid selection (${MENU_PARSE_ERROR}). Use numbers 0-14, comma-separated."
+    if ! parse_menu_selection "$answer" 16; then
+      warn "Invalid selection (${MENU_PARSE_ERROR}). Use numbers 0-16, comma-separated."
       continue
     fi
     if print_selection_summary "${MENU_IDS[@]}"; then
@@ -169,6 +175,8 @@ Usage:
   vps-setup status             Read-only system/firewall status
   vps-setup firewall STATUS    Firewall subcommand (select|apply|status|...)
   vps-setup network STATUS     Container Network Doctor (status|diagnose|test|...)
+  vps-setup service COMMAND    Unified Service Access (menu|view|test|repair|preset|...)
+  vps-setup dns COMMAND        DNS & domain routing (configure|list|refresh|origin|test|...)
   vps-setup uninstall MODE     Uninstall (keep-config|all; no arg = prompt)
   vps-setup --version          Print version
   vps-setup --help             Show this help
@@ -205,7 +213,7 @@ case "${1:-menu}" in
       error "Non-interactive runs require explicit confirmation: vps-setup run <ids> --yes"
       exit 1
     fi
-    parse_menu_selection "$selection" 14 || die "Invalid selection (${MENU_PARSE_ERROR})."
+    parse_menu_selection "$selection" 16 || die "Invalid selection (${MENU_PARSE_ERROR})."
     print_selection_summary "${MENU_IDS[@]}" || die "Selection rejected."
     VPS_SETUP_INTERACTIVE=0
     if selection_has_service_actions "${MENU_IDS[@]}" && [[ "${VPS_SETUP_SKIP_FIREWALL:-0}" != "1" ]]; then
@@ -226,6 +234,18 @@ case "${1:-menu}" in
     init_runtime
     shift
     firewall_cli "$@"
+    ;;
+  service|services)
+    need_root
+    init_runtime
+    shift
+    unified_cli "$@"
+    ;;
+  dns|domains)
+    need_root
+    init_runtime
+    shift
+    dns_cli "$@"
     ;;
   network)
     need_root

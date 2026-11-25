@@ -26,7 +26,7 @@ mkdir -p -- "$(dirname -- "$WATCH_LOG")" 2>/dev/null || true
 
 while true; do
   if [[ -x "$FIREWALL" ]]; then
-    "$FIREWALL" nft-reconcile >>"$WATCH_LOG" 2>&1 || true
+    "$FIREWALL" service-reconcile 0 >>"$WATCH_LOG" 2>&1 || true
   fi
   if [[ -x "$NETWORK" ]]; then
     "$NETWORK" reconcile 0 >>"$WATCH_LOG" 2>&1 || true

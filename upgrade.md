@@ -1,4 +1,4 @@
-# VPS SENTINEL v1.2.0 — Container Network Doctor implementation record
+# VPS SENTINEL v1.3.0 — Container Network Doctor implementation record
 
 Status: **implemented, tested and ready to release**.
 
@@ -123,18 +123,18 @@ Network tests stub `docker`, `ip`, `iptables`, `getent`, `curl`, `openssl`, `tim
 
 ## Install / update procedure
 
-Release `v1.2.0` is pinned by immutable tag with its SHA-256 published in `checksums/v1.2.0.sha256`. The installer verifies that checksum automatically.
+Release `v1.3.0` is pinned by immutable tag with its SHA-256 published in `checksums/v1.3.0.sha256`. The installer verifies that checksum automatically.
 
 Fresh install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.2.0/install.sh -o install.sh && sudo bash install.sh
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.3.0/install.sh -o install.sh && sudo bash install.sh
 ```
 
 Upgrade an existing toolkit while preserving configuration and state:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.2.0/install.sh -o install.sh && sudo bash install.sh --install-only
+curl -fsSL https://raw.githubusercontent.com/sayedatiqurrahman/vps-setup-toolkit/v1.3.0/install.sh -o install.sh && sudo bash install.sh --install-only
 sudo vps-setup status
 sudo vps-setup network status
 ```

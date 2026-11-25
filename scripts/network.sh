@@ -660,8 +660,9 @@ mtu_evidence(){
   NETWORK_WAN_IF="$(get_wan || true)"
   NETWORK_WAN_MTU="$(interface_mtu "${NETWORK_WAN_IF:-}" || true)"
   [[ -n "$NETWORK_WAN_MTU" ]] || NETWORK_WAN_MTU="unknown"
-  while read -r bridge _; do
+  while read -r bridge _ address_family; do
     [[ -n "$bridge" ]] || continue
+    [[ "${address_family:-ipv4}" == "ipv4" ]] || continue
     seen=1
     mtu="$(interface_mtu "$bridge" || true)"
     [[ -n "$mtu" ]] || mtu="unknown"
@@ -698,8 +699,9 @@ mss_build_state(){
   tmp="$(mktemp)" || return 1
   wan="$(get_wan || true)"
   [[ -n "$wan" ]] || { rm -f -- "$tmp"; warn "No default-route interface detected; MSS rules not generated."; return 1; }
-  while read -r bridge cidr; do
+  while read -r bridge cidr address_family; do
     [[ -n "$bridge" && -n "$cidr" ]] || continue
+    [[ "${address_family:-ipv4}" == "ipv4" ]] || continue
     printf '%s|%s|%s\n' "$bridge" "$cidr" "$wan"
   done < <(bridge_inventory) >"$tmp"
   MSS_STATE_TMP="$tmp"

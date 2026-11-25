@@ -97,6 +97,9 @@ docker_install(){
 
   # Docker bridge creation changes the interfaces this toolkit must reconcile.
   start_watcher || warn "Firewall watcher installation failed."
+  # Smart default: keep host + Docker egress working for package registries,
+  # DNS, HTTPS and common development endpoints. Outbound only.
+  unified_smart_configure standard 1 || warn "Smart outbound service configuration was deferred."
   if command_exists docker; then
     docker version 2>/dev/null || true
     docker compose version 2>/dev/null || true

@@ -75,16 +75,18 @@ assert_false valid_ipv4_cidr 10.0.0.0/abc
 # --- service catalog --------------------------------------------------------
 line="$(service_line 18)"
 check "service 18 id" "18" "$(cut -d'|' -f1 <<<"$line")"
-check "service 18 name" "External MariaDB" "$(cut -d'|' -f2 <<<"$line")"
-check "service 18 ports" "23306" "$(cut -d'|' -f3 <<<"$line")"
-assert_false service_line 99
+check "service 18 name" "SQL Server" "$(cut -d'|' -f3 <<<"$line")"
+check "service 18 ports" "1433" "$(cut -d'|' -f4 <<<"$line")"
+assert_false service_line 9999
 
 SELECTED_SERVICE_IDS="1 5 18"
 CUSTOM_TCP_PORTS="8443 443"
 CUSTOM_UDP_PORTS=""
 recompute_effective_ports
-check "recompute_effective_ports TCP" "25 80 443 465 587 8443 23306" "$TCP_EGRESS_PORTS"
+check "recompute_effective_ports TCP" "22 80 443 1433 8443" "$TCP_EGRESS_PORTS"
 check "recompute_effective_ports UDP" "" "$UDP_EGRESS_PORTS"
+assert_true valid_ipv6 2001:db8::1
+assert_false valid_ipv6 10.0.0.1
 
 # --- config save/load round trip -------------------------------------------
 SELECTED_SERVICE_IDS="1 5"

@@ -8,7 +8,7 @@
 COMMON_LOADED=1
 
 APP_NAME="vps-setup"
-APP_VERSION="1.2.0"
+APP_VERSION="1.3.0"
 TOOLKIT_NAME="VPS Setup Toolkit"
 # Interactive runs may prompt for a target port when several are allowed.
 # Non-interactive `run ... --yes` stays deterministic and never prompts.
@@ -23,6 +23,12 @@ LOG_FILE="${VPS_SETUP_LOG_FILE:-${LOG_DIR}/setup.log}"
 BACKUP_DIR="${VPS_SETUP_BACKUP_DIR:-/var/backups/vps-setup}"
 INBOUND_RULES_FILE="${VPS_SETUP_INBOUND_RULES:-${STATE_DIR}/host-inbound.rules}"
 NFT_STATE_FILE="${VPS_SETUP_NFT_STATE:-${STATE_DIR}/nft-applied.rules}"
+NFT_FAILED_RULES_FILE="${VPS_SETUP_NFT_FAILED_RULES:-${STATE_DIR}/nft-last-failed.rules}"
+NFT_VALIDATION_LOG="${VPS_SETUP_NFT_VALIDATION_LOG:-${STATE_DIR}/nft-validation.log}"
+CUSTOM_SERVICES_FILE="${VPS_SETUP_CUSTOM_SERVICES:-${STATE_DIR}/custom-services.conf}"
+SERVICE_TEST_RESULTS_FILE="${VPS_SETUP_SERVICE_TEST_RESULTS:-${STATE_DIR}/service-access-tests.rules}"
+SERVICE_LAST_WORKING_FILE="${VPS_SETUP_SERVICE_LAST_WORKING:-${STATE_DIR}/service-access-last-working.conf}"
+SERVICE_BACKUP_DIR="${VPS_SETUP_SERVICE_BACKUP_DIR:-${BACKUP_DIR}/unified-service-access}"
 
 # Installed location and generated artifacts.
 INSTALL_DIR="${VPS_SETUP_HOME:-/usr/local/lib/vps-setup-toolkit}"
@@ -107,6 +113,17 @@ confirm_typed(){
   local expected="$1" answer=""
   read -r -p "Type '${expected}' to confirm: " answer || return 1
   [[ "$answer" == "$expected" ]]
+}
+
+# Like confirm(), but blank/Y means yes. Used by the Unified Service Access
+# final summary where the documented prompt is "Apply these changes? [Y/n]".
+confirm_yes(){
+  local answer=""
+  if [[ "${VPS_SETUP_INTERACTIVE:-1}" == "0" ]]; then
+    return 0
+  fi
+  read -r -p "$1 [Y/n]: " answer || return 1
+  [[ -z "$answer" || "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
 need_root(){
@@ -452,6 +469,21 @@ valid_ipv4(){
     [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1
     (( 10#$octet <= 255 )) || return 1
   done
+  return 0
+}
+
+valid_ipv6(){
+  local ip="${1:-}" part found=0
+  [[ "$ip" == *:* ]] || return 1
+  [[ "$ip" =~ ^[0-9A-Fa-f:.]+$ ]] || return 1
+  # Accept compressed notation without trying to reimplement full RFC 4291
+  # parsing here; nftables remains the authoritative validator before apply.
+  for part in ${ip//:/ }; do
+    [[ -z "$part" ]] && continue
+    [[ "$part" =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+    found=1
+  done
+  (( found == 1 )) || return 1
   return 0
 }
 

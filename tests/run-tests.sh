@@ -45,6 +45,9 @@ bash tests/test-firewall.sh || fail=1
 printf '\n== Container Network Doctor tests (stubbed commands) ==\n'
 bash tests/test-network.sh || fail=1
 
+printf '\n== DNS and domain routing tests (stubbed commands) ==\n'
+bash tests/test-dns.sh || fail=1
+
 printf '\n== Uninstall tests (stubbed commands) ==\n'
 bash tests/test-uninstall.sh || fail=1
 

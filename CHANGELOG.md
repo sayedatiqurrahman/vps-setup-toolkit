@@ -2,6 +2,26 @@
 
 All notable changes to the VPS Setup Toolkit are documented here.
 
+## [1.3.0] - 2026-11-25
+
+### Added
+
+- Unified Service Access as main menu 15 and `vps-setup service ...`: 58 outbound service definitions, presets, custom service IDs, IPv6 egress, audit/repair and host/container connectivity tests.
+- DNS & Domain Routing as main menu 16 and `vps-setup dns ...`: Cloudflare A/AAAA/CNAME upsert/delete, root-only token storage, Cloudflare IP range refresh, Cloudflare origin UFW allow rules, domain state and Traefik/Docker label guidance. Provider-agnostic state is kept for other DNS providers.
+- Persistent DNS state at `/etc/vps-setup/dns-domains.rules`, `/etc/vps-setup/cloudflare.token` (0600), `/etc/vps-setup/cloudflare-ips.json` and `/etc/vps-setup/cloudflare-origin.rules`.
+- `AGENT.md` release handoff with exact safety invariants and publication commands.
+
+### Fixed
+
+- Docker egress rules now accept `ct state { new, established, related }`, so TLS handshakes from containers are not dropped after the initial packet (reported with SMTP 587 / IMAPS 993).
+- The toolkit-owned jump is moved to the first parent-chain rule, preventing unrelated drops or verdict-returning chains from making managed rules unreachable.
+- `nft -c -f` parser errors are displayed instead of suppressed; rejected rulesets are preserved at `/etc/vps-setup/nft-last-failed.rules` and parser output at `/etc/vps-setup/nft-validation.log`.
+- Duplicate jump cleanup no longer touches unrelated rules; failed configuration changes roll back to the last working state.
+
+### Safety
+
+- No full ruleset flush, permissive policy change, physical MTU change, Swarm recreation or TLS verification bypass. No database, Redis, mail, Docker API or blanket container-port exposure.
+
 ## [1.2.0] - 2026-11-25
 
 ### Added

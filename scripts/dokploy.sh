@@ -85,6 +85,9 @@ dokploy_install(){
     nft_apply || warn "Ingress rules could not be applied now; the watcher will retry."
   fi
   start_watcher || warn "Watcher installation failed; use Repair and Recovery."
+  # Smart default for panels: web, DNS, mail, object storage, SSH and monitoring
+  # egress for both the VPS host and Docker containers. No inbound port opens.
+  unified_smart_configure hosting 1 || warn "Smart outbound service configuration was deferred."
   success "Dokploy launch finished."
 }
 

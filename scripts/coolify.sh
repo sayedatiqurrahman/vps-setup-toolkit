@@ -67,6 +67,9 @@ coolify_install(){
   docker_swarm_ensure || warn "Docker Swarm could not be initialized; overlay networking may be unavailable."
   network_enable_for_docker "${VPS_SETUP_INTERACTIVE:-1}" || warn "Container network auto-repair could not be enabled."
   start_watcher || warn "Watcher installation failed; use Repair and Recovery."
+  # Smart default for panels: web, DNS, mail, object storage, SSH and monitoring
+  # egress for both the VPS host and Docker containers. No inbound port opens.
+  unified_smart_configure hosting 1 || warn "Smart outbound service configuration was deferred."
   success "Coolify launch finished."
 }
 

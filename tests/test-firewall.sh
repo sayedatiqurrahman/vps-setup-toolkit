@@ -49,6 +49,17 @@ if [[ "$*" == *"link show"* && "$*" != *"-o"* ]]; then
     *) exit 1 ;;
   esac
 fi
+if [[ "$*" == *"-6"* && "$*" == *"addr show dev"* ]]; then
+  name="${@: -1}"
+  case "$name" in
+    docker0) echo "3: docker0    inet6 2001:db8:1::1/64 scope global" ;;
+    docker_gwbridge) echo "4: docker_gwbridge    inet6 2001:db8:2::1/64 scope global" ;;
+    br-abc123) echo "5: br-abc123    inet6 2001:db8:3::1/64 scope global" ;;
+    br-deadbeef) echo "5: br-deadbeef    inet6 2001:db8:4::1/64 scope global" ;;
+    *) exit 1 ;;
+  esac
+  exit 0
+fi
 if [[ "$*" == *"addr show dev"* ]]; then
   name="${@: -1}"
   if [[ "${FAKE_BRIDGE_RECREATED:-0}" == "1" && "$name" == "br-abc123" ]]; then exit 1; fi
@@ -74,21 +85,39 @@ with_handles=0
 if [[ "${1:-}" == "-a" ]]; then with_handles=1; shift; fi
 action="${1:-}"
 case "$action" in
-  -c) exit 0 ;;
+  -c)
+    if [[ "${FAKE_NFT_VALIDATION_FAIL:-0}" == "1" ]]; then
+      printf '%s\n' 'test-file.nft:7:1-9: Error: syntax error, unexpected identifier' >&2
+      exit 1
+    fi
+    exit 0
+    ;;
   -f)
+    [[ "${FAKE_NFT_APPLY_FAIL:-0}" == "1" ]] && exit 1
     file="${2:-}"
     while IFS= read -r line; do
       case "$line" in
-        "add chain"*) : ;;
+        "add chain"*)
+          [[ "$line" == *" vps_docker_forward" ]] && touch "$STATE/managed.exists"
+          ;;
         "flush chain"*) : >"$STATE/managed.rules" ;;
-        "insert rule"*) printf '%s # handle %s\n' "$line" "$RANDOM" >>"$STATE/parent.rules" ;;
+        "delete rule"*)
+          rule_handle="${line##* }"
+          grep -v "handle ${rule_handle}$" "$STATE/parent.rules" >"$STATE/parent.tmp" || true
+          mv "$STATE/parent.tmp" "$STATE/parent.rules"
+          ;;
+        "insert rule"*)
+          { printf '%s # handle %s\n' "$line" "$RANDOM"; cat "$STATE/parent.rules"; } \
+            >"$STATE/parent.tmp"
+          mv "$STATE/parent.tmp" "$STATE/parent.rules"
+          ;;
         "add rule"*) printf '%s\n' "$line" >>"$STATE/managed.rules" ;;
       esac
     done <"$file"
     exit 0
     ;;
   list)
-    chain="${4:-}"
+    chain="${5:-}"
     if [[ "$chain" == "vps_docker_forward" ]]; then
       [[ -f "$STATE/managed.exists" ]] || exit 1
       target="$STATE/managed.rules"
@@ -108,7 +137,12 @@ case "$action" in
     exit 0
     ;;
   flush) : >"$STATE/managed.rules"; exit 0 ;;
-  insert) printf '%s # handle %s\n' "$*" "$RANDOM" >>"$STATE/parent.rules"; exit 0 ;;
+  insert)
+    { printf '%s # handle %s\n' "$*" "$RANDOM"; cat "$STATE/parent.rules"; } \
+      >"$STATE/parent.tmp"
+    mv "$STATE/parent.tmp" "$STATE/parent.rules"
+    exit 0
+    ;;
   delete)
     handle="${@: -1}"
     grep -v "handle ${handle}$" "$STATE/parent.rules" >"$STATE/parent.tmp" || true
@@ -134,9 +168,14 @@ case "${1:-}" in
   default|--force) exit 0 ;;
   allow|delete)
     action="$1"; shift
-    src="Anywhere"; dir="IN"; port=""
+    verb="ALLOW"
+    if [[ "$action" == "delete" && ( "${1:-}" == "allow" || "${1:-}" == "deny" ) ]]; then
+      [[ "${1:-}" == "deny" ]] && verb="DENY"
+      shift
+    fi
+    src="Anywhere"; dir="IN"; port=""; comment=""
     if [[ "${1:-}" == "out" ]]; then
-      dir="OUT"; shift; port="${1:-}"
+      dir="OUT"; comment="VPS-MANAGED container egress"; shift; port="${1:-}"
     elif [[ "${1:-}" == "from" ]]; then
       shift; src="${1:-}"; shift
       while (( $# > 0 )); do
@@ -151,11 +190,13 @@ case "${1:-}" in
     else
       port="${1:-}"
     fi
-    rule="${port} ALLOW ${dir} ${src}"
+    rule="${port} ${verb} ${dir} ${src}"
+    [[ -n "$comment" ]] && rule+=" # ${comment}"
     if [[ "$action" == "allow" ]]; then
       grep -Fxq -- "$rule" "$STATE" || printf '%s\n' "$rule" >>"$STATE"
     else
-      grep -Fxv -- "$rule" "$STATE" >"$STATE.tmp" || true
+      awk -v rule="$rule" '$0 == rule && !removed { removed=1; next } { print }' \
+        "$STATE" >"$STATE.tmp"
       mv "$STATE.tmp" "$STATE"
     fi
     exit 0
@@ -193,6 +234,9 @@ export VPS_SETUP_UNIT="${TEST_TMP}/systemd/system/vps-firewall-watch.service"
 source "$ROOT_DIR/scripts/common.sh"
 # shellcheck source=../scripts/firewall.sh
 source "$ROOT_DIR/scripts/firewall.sh"
+# shellcheck source=../scripts/network.sh
+source "$ROOT_DIR/scripts/network.sh"
+run_probe(){ PROBE_LAST_OUTPUT="STUB PROBE"; PROBE_LAST_RC=0; }
 init_runtime
 
 PASS=0
@@ -261,6 +305,34 @@ check "nft validation happens before apply" "1" "$validation_ok"
 nft_apply
 check "one jump after repeated apply" "1" "$(grep -c 'jump vps_docker_forward' "$TEST_STATE_DIR/nft/parent.rules")"
 
+# Root-cause regression: outbound established packets must be allowed too.
+check_true "new outbound TCP state allowed" grep -q "ct state '{ new, established, related }'" <<<"$rules"
+check_true "outbound TCP rule is labelled" grep -q 'DOCKER-EGRESS-TCP' <<<"$rules"
+check_true "outbound UDP rule is labelled" grep -q 'DOCKER-EGRESS-UDP' <<<"$rules"
+check_true "established return traffic allowed" grep -q 'DOCKER-EGRESS-RETURN' <<<"$rules"
+
+# A jump appended after a drop is unreachable. Reconciliation must move only
+# the toolkit-owned jump to the first parent-chain position.
+printf '%s\n' \
+  'add rule inet cloud_dev forward drop # handle 900' \
+  'insert rule inet cloud_dev forward jump vps_docker_forward comment "VPS-MANAGED-DOCKER-JUMP" # handle 901' \
+  'add rule inet cloud_dev forward iifname "eth0" oifname "docker0" accept # handle 99' \
+  >"$TEST_STATE_DIR/nft/parent.rules"
+nft_apply >/dev/null
+first_rule="$(head -1 "$TEST_STATE_DIR/nft/parent.rules" | sed 's/ # handle [0-9]*$//')"
+check_true "managed jump moved ahead of drop" grep -q 'jump vps_docker_forward' <<<"$first_rule"
+check "one jump after reorder" "1" "$(grep -c 'jump vps_docker_forward' "$TEST_STATE_DIR/nft/parent.rules")"
+check_true "unrelated drop preserved after reorder" grep -q 'drop # handle 900' "$TEST_STATE_DIR/nft/parent.rules"
+unified_audit_rules >/dev/null
+check_true "audit confirms jump is first" grep -q 'jump_first=yes' <<<"$(unified_audit_rules)"
+
+# nft -c -f errors must be visible and the rejected ruleset must be preserved.
+diagnostics="$(FAKE_NFT_VALIDATION_FAIL=1 nft_apply 2>&1 || true)"
+check_true "nft validation failure is reported" grep -q 'nftables validation failed' <<<"$diagnostics"
+check_true "nft parser error is displayed" grep -q 'unexpected identifier' <<<"$diagnostics"
+check_true "failed ruleset is preserved" test -f "$NFT_FAILED_RULES_FILE"
+check_true "preserved ruleset has connection states" grep -q 'new, established, related' "$NFT_FAILED_RULES_FILE"
+
 # --- simulated bridge recreation -------------------------------------------
 FAKE_BRIDGE_RECREATED=1 nft_apply
 rules="$(cat "$NFT_STATE_FILE")"
@@ -280,7 +352,7 @@ start_watcher
 watcher_ok=0
 if [[ -x "$VPS_SETUP_WATCHER" ]]; then watcher_ok=1; fi
 check "watcher installed" "1" "$watcher_ok"
-check_true "watcher calls nft reconcile" grep -q 'nft-reconcile' "$VPS_SETUP_WATCHER"
+check_true "watcher calls unified service reconcile" grep -q 'service-reconcile' "$VPS_SETUP_WATCHER"
 check_true "watcher calls network reconcile" grep -q '"\$NETWORK" reconcile' "$VPS_SETUP_WATCHER"
 unit_src="$(toolkit_file systemd/vps-firewall-watch.service)"
 check_true "unit allows backup writes" grep -q '/var/backups/vps-setup' "$unit_src"
@@ -313,7 +385,111 @@ firewall_preflight 0 3 >/dev/null 2>&1 || true
 load_config
 check "docker selection enables ingress" "1" "$ENABLE_DOKPLOY_INGRESS"
 check "docker selection enables MSS repair" "1" "$ENABLE_MSS_CLAMP"
-check_true "config stores network doctor keys" grep -q '^NETWORK_TARGET_PORT=""' "$CONF_FILE"
+check_true "config stores network doctor target port" grep -Eq '^NETWORK_TARGET_PORT="[0-9]+"' "$CONF_FILE"
+
+# --- Unified Service Access catalog and presets -----------------------------
+check_true "catalog has HTTP/3" service_line 2 >/dev/null
+check_true "catalog has WireGuard" service_line 48 >/dev/null
+check_true "catalog has Grafana" service_line 52 >/dev/null
+check_true "catalog has custom schema" grep -q '^1|Web|HTTP and HTTPS|80 443||Common web/API destinations|1|cloudflare.com|https$' "$(services_catalog_file)"
+check_true "standard preset is non-empty" test -n "$(preset_service_ids standard)"
+check "development preset has services" "yes" "$([[ -n "$(preset_service_ids development)" ]] && printf yes || printf no)"
+check "all preset has 58 services" "58" "$(count_items "$(preset_service_ids all)")"
+
+# Exact confirmation summary required by the specification.
+summary="$(unified_print_summary '1 2 3' '' '')"
+check_true "summary service count" grep -qx 'Selected services: 3' <<<"$summary"
+check_true "summary TCP count" grep -qx 'TCP ports: 3' <<<"$summary"
+check_true "summary UDP count" grep -qx 'UDP ports: 2' <<<"$summary"
+check_true "summary host target" grep -qx '  VPS Host:             YES' <<<"$summary"
+check_true "summary container target" grep -qx '  Docker Containers:    YES' <<<"$summary"
+check_true "summary persistence" grep -qx 'Persistent after reboot: YES' <<<"$summary"
+
+# Non-interactive apply saves host + container outbound state.
+VPS_SETUP_INTERACTIVE=0
+unified_apply_selection "1 3 4 5" "" "" "unit test selection" 1 >/dev/null
+load_config
+check "unified selection persisted" "1 3 4 5" "$SELECTED_SERVICE_IDS"
+check_true "unified selection has TCP 443" grep -q '443' <<<"$TCP_EGRESS_PORTS"
+check_true "unified selection has UDP 123" grep -q '123' <<<"$UDP_EGRESS_PORTS"
+check_true "last working config saved" test -f "$SERVICE_LAST_WORKING_FILE"
+
+# Validation failure must preserve the previous configuration.
+before_ids="$SELECTED_SERVICE_IDS"
+FAKE_NFT_VALIDATION_FAIL=1 unified_apply_selection "13 14 15" "" "" "failed validation" 1 >/dev/null 2>&1 || true
+load_config
+check "validation failure preserves selection" "$before_ids" "$SELECTED_SERVICE_IDS"
+
+# Custom service definitions are persisted and selected with a stable ID.
+VPS_SETUP_CUSTOM_SERVICE_NAME="Acme API"
+VPS_SETUP_CUSTOM_SERVICE_PORT="7443"
+VPS_SETUP_CUSTOM_SERVICE_PROTOCOL="tcp"
+VPS_SETUP_CUSTOM_SERVICE_NOTE="Test custom endpoint"
+unified_add_custom_service >/dev/null
+load_config
+check_true "custom service file created" test -f "$CUSTOM_SERVICES_FILE"
+check_true "custom service definition stored" grep -q '|Acme API|7443|' "$CUSTOM_SERVICES_FILE"
+check_true "custom service selected" grep -q '1000' <<<"$SELECTED_SERVICE_IDS"
+check_true "custom port effective" grep -q '7443' <<<"$TCP_EGRESS_PORTS"
+unset VPS_SETUP_CUSTOM_SERVICE_NAME VPS_SETUP_CUSTOM_SERVICE_PORT VPS_SETUP_CUSTOM_SERVICE_PROTOCOL VPS_SETUP_CUSTOM_SERVICE_NOTE
+
+# Connectivity results are recorded for both perspectives.
+unified_connectivity_test >/dev/null
+check_true "connectivity results written" test -f "$SERVICE_TEST_RESULTS_FILE"
+check_true "connectivity has host status" grep -q 'SUCCESS' "$SERVICE_TEST_RESULTS_FILE"
+check_true "view includes connectivity status" unified_view_enabled >/dev/null
+
+# Audit/repair detects and removes duplicate managed rules only.
+check "unique UFW duplicate port starts empty" "0" "$(grep -c '65500/tcp ALLOW OUT' "$TEST_STATE_DIR/ufw.rules" || true)"
+printf '%s\n' '65500/tcp ALLOW OUT Anywhere # VPS-MANAGED container egress' >>"$TEST_STATE_DIR/ufw.rules"
+printf '%s\n' '65500/tcp ALLOW OUT Anywhere # VPS-MANAGED container egress' >>"$TEST_STATE_DIR/ufw.rules"
+ufw_cleanup_duplicate_managed_out >/dev/null
+check "duplicate managed UFW rule removed" "1" "$(grep -c '65500/tcp ALLOW OUT' "$TEST_STATE_DIR/ufw.rules" || true)"
+printf '%s\n' '443/tcp DENY OUT Anywhere # VPS-MANAGED container egress' >>"$TEST_STATE_DIR/ufw.rules"
+unified_audit_rules >/dev/null
+check_true "managed conflicting rule detected" test "$UNIFIED_AUDIT_CONFLICTS" -ge 1
+ufw_cleanup_conflicting_managed_out >/dev/null
+check "conflicting managed rule removed" "0" "$(grep -c '443/tcp DENY OUT' "$TEST_STATE_DIR/ufw.rules" || true)"
+printf '%s\n' 'insert rule inet cloud_dev forward jump vps_docker_forward comment "VPS-MANAGED-DOCKER-JUMP" # handle 123' >>"$TEST_STATE_DIR/nft/parent.rules"
+before_jumps="$(grep -c 'VPS-MANAGED-DOCKER-JUMP' "$TEST_STATE_DIR/nft/parent.rules" || true)"
+nft_cleanup_duplicate_jumps >/dev/null
+check "duplicate managed nft jump removed" "$((before_jumps - 1))" "$(grep -c 'VPS-MANAGED-DOCKER-JUMP' "$TEST_STATE_DIR/nft/parent.rules" || true)"
+unified_audit_rules >/dev/null
+check "audit reports no conflicts" "0" "$UNIFIED_AUDIT_CONFLICTS"
+
+# Backup and restore return the exact prior selection and custom services.
+unified_backup_service_state >/dev/null
+check_true "service backup dir recorded" test -n "$SERVICE_BACKUP_LAST_DIR"
+check_true "service backup created" test -d "$SERVICE_BACKUP_LAST_DIR"
+backup_dir="$SERVICE_BACKUP_LAST_DIR"
+unified_apply_selection "1" "" "" "pre-restore change" 1 >/dev/null
+unified_restore_service_state "$backup_dir" >/dev/null
+load_config
+check_true "restore returns custom service" grep -q '1000' <<<"$SELECTED_SERVICE_IDS"
+
+# Smart configuration is additive and never replaces an existing selection.
+pre_smart="$SELECTED_SERVICE_IDS"
+unified_smart_configure standard 1 >/dev/null
+load_config
+check_true "smart configure keeps prior services" grep -q '1000' <<<"$SELECTED_SERVICE_IDS"
+check_true "smart configure adds standard services" grep -q '1' <<<"$SELECTED_SERVICE_IDS"
+
+# All-common preset enables every predefined service and generates IPv6 rules.
+apply_named_preset all 1 >/dev/null
+load_config
+check "all-common preset selected ID count" "58" "$(count_items "$SELECTED_SERVICE_IDS")"
+check "custom services excluded from preset" "false" "$([[ "$SELECTED_SERVICE_IDS" == *1000* ]] && printf true || printf false)"
+nft_apply >/dev/null
+check_true "IPv6 bridge egress rule generated" grep -q 'ip6 saddr 2001:db8:1::1/64' "$NFT_STATE_FILE"
+check_true "IPv6 return rule generated" grep -q 'ip6 daddr 2001:db8:1::1/64' "$NFT_STATE_FILE"
+
+# Exact submenu text is stable for operators and documentation.
+menu_output="$(printf '0\n' | unified_service_menu)"
+check_true "unified menu heading" grep -qx '========== UNIFIED SERVICE ACCESS ==========' <<<"$menu_output"
+check_true "unified menu subtitle" grep -qx 'Configure outbound access for VPS Host + Docker Containers' <<<"$menu_output"
+check_true "unified menu option 1" grep -qx '\[1\] Select Services Individually' <<<"$menu_output"
+check_true "unified menu option 9" grep -qx '\[9\] Backup / Restore Configuration' <<<"$menu_output"
+check_true "unified menu prompt" grep -qx 'Choose an option:' <<<"$menu_output"
 
 printf '\nFirewall tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 )) || exit 1
